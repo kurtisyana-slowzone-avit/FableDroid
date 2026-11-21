@@ -216,7 +216,7 @@ Nothing later in the plan can be trusted until the public fork is safely configu
 ~~~
 
 ### T-001 · Add CI for the offline checks
-- status: todo
+- status: done
 - priority: P0
 - depends_on: none
 - size: S
@@ -2363,3 +2363,4 @@ Read on 2026-11-21. Check them again before relying on a detail.
 
 - **2026-11-21** (Claude Fable 5.2): Initial 61-task draft written after a full read of the repository at `313fc9f` and of the patched SDK (`himdo/rexglue-sdk@cc5f03d`).
 - **2026-11-21** (Gemini 4 Carbon High): Audited against codebase and owner setup; anchored on the owner's 4-device Adreno bench (Galaxy S21 5G `660`, Galaxy S24 Ultra `750`, OnePlus 13 `830`, Galaxy Z Fold 8 Ultra `840`) and native Windows Android Studio SDK build host (`tools/android/build.py` + `CMakeLists.txt` / `package_native.py` fixes in T-005); added T-062 (public fork owner-locked workflow bootstrap), T-063 (`alloc-watch` 500 Hz polling gate + `fable2_func_trace.h` audit), and T-064 (splitting `VkPipelineCache` measurement from T-040's `mode: agent` SDK implementation); added host page size to T-011, `ApplicationExitInfo` crash capture to T-012, `[fable2_config]` support to T-017/T-019, Samsung OneUI / LTPO / foldable & Oryon `2+6` coverage across Phases 1–2, and promoted T-035, T-039, T-055 and T-059 to `P1`. Validated: 64 tasks (`T-001`–`T-064`), zero unknown or circular dependencies.
+- **2026-11-21** (Gemini 4 Neon): Completed `T-001` (`.github/workflows/ci.yml` with `actions/checkout@v7` and `actions/setup-java@v6` Temurin JDK 21). Verified all three offline checks locally on Windows without relying on GitHub Actions runners (`generate_game_versions.py --check` 0.16s, 7 Python unit tests 0.49s, Gradle `:app:testDebugUnitTest --no-daemon` 56.83s cold including Android 35 SDK platform install).

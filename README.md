@@ -225,7 +225,7 @@ for custom driver loading.
 git clone https://github.com/hardsilinder/FableDroid.git
 cd FableDroid
 git submodule update --init --recursive
-git -C thirdparty/rexglue-sdk apply ../rexglue-sdk-android.patch
+python3 tools/sdk_patch.py apply
 ```
 
 Then follow [android/README.md → Building from source](android/README.md#building-from-source):

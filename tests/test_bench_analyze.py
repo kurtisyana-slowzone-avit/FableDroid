@@ -308,5 +308,331 @@ class OutputTests(AnalyzerTestCase):
         self.assertEqual([p.name for p in self.tmp.iterdir()], ["result.json"])
 
 
+def device_lines(package="turnip27", driver_version="0x2", driver_info="Mesa 1.0.0", present_mode=2):
+    lines = [
+        f"{PREFIX}Vulkan device 'Synthetic GPU': API 1.3.0, vendor 0x5143, device 0x1, driver version {driver_version}",
+        f"{PREFIX}* driverInfo: {driver_info}",
+        f"{PREFIX}VulkanPresenter: Created 1280x720 swapchain with format 37, color space 0, presentation mode {present_mode}",
+    ]
+    if package != "system":
+        lines.insert(
+            0,
+            f"{PREFIX}Loaded custom Vulkan driver /data/data/example/files/gpu_drivers/{package}/"
+            "libvulkan_freedreno.so via libadrenotools",
+        )
+    return lines
+
+
+def comparison_report(**changes):
+    metrics = {
+        "sample_count": 1800,
+        "median_fps": 30.0,
+        "median_ms": 33.3,
+        "p95_ms": 36.0,
+        "p99_ms": 40.0,
+        "worst_ms": 45.0,
+        "over_40ms": 2,
+        "over_50ms": 1,
+        "over_100ms": 0,
+        "window_seconds": 5,
+        "windows": [],
+    }
+    identity = {
+        "route": "forest_walk",
+        "source": "SWAPTIMING",
+        "samples": 1801,
+        "frame_limit": "30",
+        "vsync": "true",
+        "vulkan_device": "Vulkan device 'Synthetic GPU': API 1.3.0, vendor 0x5143, device 0x1, driver version 0x2",
+        "driver_package": "turnip27",
+        "driver_info": "Mesa 1.0.0",
+        "swapchain": "VulkanPresenter: Created 1280x720 swapchain with format 37, color space 0, presentation mode 2",
+    }
+    for key, value in changes.items():
+        if key in metrics:
+            metrics[key] = value
+        else:
+            identity[key] = value
+    return {
+        "tool": "fabledroid-bench-analyze",
+        "tool_version": "1.1.0",
+        "percentile_method": "nearest-rank",
+        "results": [
+            {
+                "log": "synthetic.log",
+                "log_sha256": "0" * 64,
+                "route": identity["route"],
+                "source": identity["source"],
+                "capture": {
+                    "samples": identity["samples"],
+                    "frame_limit": identity["frame_limit"],
+                    "vsync": identity["vsync"],
+                    "meaning": "cpu_swap_processing",
+                },
+                "metrics": metrics,
+                "components_ms": None,
+                "periodic": {"guest_fps": None, "swap_queue": None, "gpu_stat": None, "gpu_time": None},
+                "device": {
+                    "vulkan_devices": [identity["vulkan_device"]],
+                    "swapchains": [identity["swapchain"]],
+                    "driver_package": identity["driver_package"],
+                    "driver_info": identity["driver_info"],
+                },
+                "warnings": [],
+            }
+        ],
+    }
+
+
+class CompareTestCase(AnalyzerTestCase):
+    def write_report(self, report, name):
+        path = self.tmp / name
+        path.write_text(json.dumps(report), encoding="utf-8")
+        return path
+
+    def compare(self, baseline=None, candidate=None, *extra):
+        base = self.write_report(comparison_report(**(baseline or {})), "baseline.json")
+        cand = self.write_report(comparison_report(**(candidate or {})), "candidate.json")
+        return run_tool("compare", base, cand, *extra)
+
+    @staticmethod
+    def last_line(result):
+        return result.stdout.strip().splitlines()[-1]
+
+    def assert_refused(self, result, phrase):
+        self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+        self.assertEqual(result.stdout, "")
+        self.assertNotIn("Traceback", result.stderr)
+        self.assertIn(phrase, result.stderr)
+
+
+class CompareGateTests(CompareTestCase):
+    def test_unchanged_result_passes_with_a_row_for_every_metric(self):
+        result = self.compare()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.last_line(result), "RESULT: pass")
+        for label in ("Median FPS", "Median ms", "P95 ms", "P99 ms", "Worst ms", "Over 40 ms", "Over 50 ms", "Over 100 ms"):
+            self.assertIn(label, result.stdout)
+
+    def test_table_is_fixed_width_markdown(self):
+        rows = [l for l in self.compare(candidate={"p99_ms": 41.5}).stdout.splitlines() if l.startswith("|")]
+        self.assertEqual(len(rows), 10)
+        self.assertEqual(len({len(row) for row in rows}), 1)
+        self.assertRegex(rows[1], r"^\|[-:| ]+\|$")
+
+    def test_row_reports_baseline_candidate_and_change(self):
+        output = self.compare(candidate={"p99_ms": 41.0, "over_50ms": 3}).stdout
+        p99 = next(l for l in output.splitlines() if "P99 ms" in l)
+        self.assertIn("40.0", p99)
+        self.assertIn("41.0", p99)
+        self.assertIn("+1.0 (+2.5%)", p99)
+        over = next(l for l in output.splitlines() if "Over 50 ms" in l)
+        self.assertIn("+2 (+200.0%)", over)
+
+    def test_values_exactly_at_default_limits_pass(self):
+        result = self.compare(candidate={"median_fps": 29.7, "p99_ms": 42.0})
+        self.assertEqual(result.returncode, 0, result.stdout)
+
+    def test_each_default_limit_catches_its_regression(self):
+        cases = {
+            "median_fps": {"median_fps": 29.6},
+            "p99_ms": {"p99_ms": 42.1},
+            "over_50ms": {"over_50ms": 2},
+            "over_100ms": {"over_100ms": 1},
+        }
+        for metric, candidate in cases.items():
+            with self.subTest(metric=metric):
+                result = self.compare(candidate=candidate)
+                self.assertEqual(result.returncode, 1, result.stdout)
+                self.assertEqual(self.last_line(result), f"RESULT: regression ({metric})")
+
+    def test_all_regressions_are_named(self):
+        result = self.compare(candidate={"median_fps": 25.0, "p99_ms": 60.0, "over_50ms": 9, "over_100ms": 2})
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(self.last_line(result), "RESULT: regression (median_fps, p99_ms, over_50ms, over_100ms)")
+
+    def test_improvements_pass(self):
+        result = self.compare(candidate={"median_fps": 31.0, "p99_ms": 35.0, "over_50ms": 0})
+        self.assertEqual(result.returncode, 0, result.stdout)
+
+    def test_ungated_metrics_do_not_fail_the_gate(self):
+        result = self.compare(candidate={"median_ms": 34.0, "p95_ms": 39.0, "worst_ms": 49.0, "over_40ms": 9})
+        self.assertEqual(result.returncode, 0, result.stdout)
+
+    def test_baseline_with_zero_slow_frames(self):
+        zero = {"over_50ms": 0, "over_100ms": 0}
+        self.assertEqual(self.compare(zero, zero).returncode, 0)
+        for metric in ("over_50ms", "over_100ms"):
+            with self.subTest(metric=metric):
+                result = self.compare(zero, {**zero, metric: 1})
+                self.assertEqual(result.returncode, 1, result.stderr)
+                self.assertEqual(self.last_line(result), f"RESULT: regression ({metric})")
+                self.assertIn("+1 (n/a)", result.stdout)
+
+
+class CompareLimitTests(CompareTestCase):
+    def test_each_limit_can_be_loosened_and_is_printed(self):
+        cases = [
+            ("--max-fps-drop-pct", "2", {"median_fps": 29.4}, {"median_fps": 29.3}, "median_fps"),
+            ("--max-p99-rise-pct", "10", {"p99_ms": 44.0}, {"p99_ms": 44.1}, "p99_ms"),
+            ("--max-over-50ms-rise", "2", {"over_50ms": 3}, {"over_50ms": 4}, "over_50ms"),
+            ("--max-over-100ms-rise", "1", {"over_100ms": 1}, {"over_100ms": 2}, "over_100ms"),
+        ]
+        for option, value, passing, failing, metric in cases:
+            with self.subTest(option=option):
+                allowed = self.compare(None, passing, option, value)
+                self.assertEqual(allowed.returncode, 0, allowed.stdout)
+                override = next(l for l in allowed.stdout.splitlines() if l.startswith("Limit override"))
+                self.assertIn(metric, override)
+                self.assertIn(value, override)
+                blocked = self.compare(None, failing, option, value)
+                self.assertEqual(blocked.returncode, 1, blocked.stdout)
+
+    def test_limit_can_be_tightened(self):
+        result = self.compare(None, {"p99_ms": 40.1}, "--max-p99-rise-pct", "0")
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(self.last_line(result), "RESULT: regression (p99_ms)")
+
+    def test_defaults_print_no_override(self):
+        self.assertNotIn("Limit override", self.compare().stdout)
+
+    def test_invalid_limits_are_rejected(self):
+        cases = [
+            ("--max-fps-drop-pct", "-1"),
+            ("--max-fps-drop-pct", "101"),
+            ("--max-p99-rise-pct", "nan"),
+            ("--max-p99-rise-pct", "inf"),
+            ("--max-over-50ms-rise", "-1"),
+            ("--max-over-100ms-rise", "1.5"),
+        ]
+        for option, value in cases:
+            with self.subTest(option=option, value=value):
+                result = self.compare(None, None, f"{option}={value}")
+                self.assertEqual(result.returncode, 2, result.stdout)
+                self.assertNotIn("Traceback", result.stderr)
+
+
+class CompareIdentityTests(CompareTestCase):
+    MISMATCHES = {
+        "gpu": {"vulkan_device": "Vulkan device 'Other GPU': API 1.3.0, vendor 0x5143, device 0x9, driver version 0x2"},
+        "driver version": {
+            "vulkan_device": "Vulkan device 'Synthetic GPU': API 1.3.0, vendor 0x5143, device 0x1, driver version 0x3"
+        },
+        "driver package": {"driver_package": "download-abc"},
+        "driver info": {"driver_info": "Mesa 2.0.0"},
+        "present mode": {
+            "swapchain": "VulkanPresenter: Created 1280x720 swapchain with format 37, color space 0, presentation mode 1"
+        },
+        "route": {"route": "town_walk"},
+        "frame limit": {"frame_limit": "60"},
+        "vsync": {"vsync": "false"},
+        "capture samples": {"samples": 901},
+    }
+
+    def test_each_mismatch_is_refused(self):
+        for field, candidate in self.MISMATCHES.items():
+            with self.subTest(field=field):
+                self.assert_refused(self.compare(None, candidate), field)
+
+    def test_allow_mismatch_compares_and_prints_each_difference(self):
+        for field, candidate in self.MISMATCHES.items():
+            with self.subTest(field=field):
+                result = self.compare(None, candidate, "--allow-mismatch")
+                self.assertEqual(result.returncode, 0, result.stderr)
+                warning = next(l for l in result.stdout.splitlines() if l.startswith("Mismatch allowed"))
+                self.assertIn(field, warning)
+
+    def test_allow_mismatch_still_reports_regressions(self):
+        result = self.compare(None, {"route": "town_walk", "p99_ms": 60.0}, "--allow-mismatch")
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(self.last_line(result), "RESULT: regression (p99_ms)")
+
+    def test_unknown_identity_cannot_be_confirmed(self):
+        for changes in ({"route": None}, {"driver_package": None}, {"driver_info": None}):
+            with self.subTest(changes=changes):
+                self.assert_refused(self.compare(changes, changes), "unknown")
+                self.assertEqual(self.compare(changes, changes, "--allow-mismatch").returncode, 0)
+
+    def test_guestfps_results_are_never_gated(self):
+        for extra in ((), ("--allow-mismatch",)):
+            with self.subTest(extra=extra):
+                self.assert_refused(self.compare(None, {"source": "GUESTFPS"}, *extra), "SWAPTIMING")
+
+
+class CompareInputTests(CompareTestCase):
+    def test_unusable_inputs_are_refused(self):
+        good = comparison_report()
+        missing_metric = comparison_report()
+        del missing_metric["results"][0]["metrics"]["p99_ms"]
+        two_results = comparison_report()
+        two_results["results"] *= 2
+        text_metric = comparison_report(p99_ms="40.0")
+        bool_count = comparison_report(over_50ms=True)
+        negative_count = comparison_report(over_100ms=-1)
+        zero_fps = comparison_report(median_fps=0.0)
+        zero_p99 = comparison_report(p99_ms=0.0)
+        cases = {
+            "p99_ms": missing_metric,
+            "exactly one": two_results,
+            "p99_ms ": text_metric,
+            "over_50ms": bool_count,
+            "over_100ms": negative_count,
+            "median_fps": zero_fps,
+            " p99_ms": zero_p99,
+        }
+        candidate = self.write_report(good, "candidate.json")
+        for phrase, report in cases.items():
+            with self.subTest(phrase=phrase):
+                baseline = self.write_report(report, "baseline.json")
+                self.assert_refused(run_tool("compare", baseline, candidate), phrase.strip())
+
+    def test_damaged_files_are_refused(self):
+        candidate = self.write_report(comparison_report(), "candidate.json")
+        not_json = self.tmp / "baseline.json"
+        not_json.write_text("{not json", encoding="utf-8")
+        self.assert_refused(run_tool("compare", not_json, candidate), "baseline.json")
+        nan = self.tmp / "nan.json"
+        nan.write_text(json.dumps(comparison_report()).replace('"p99_ms": 40.0', '"p99_ms": NaN'), encoding="utf-8")
+        self.assert_refused(run_tool("compare", nan, candidate), "nan.json")
+        self.assert_refused(run_tool("compare", self.tmp / "absent.json", candidate), "absent.json")
+
+
+class CompareEndToEndTests(CompareTestCase):
+    def summarize_to(self, name, intervals, route="forest_walk", **device):
+        log = self.write_log(device_lines(**device) + capture_lines(intervals), f"{name}.log")
+        out = self.tmp / f"{name}.json"
+        result = run_tool("summarize", log, "--route", route, "--out", out)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        return out
+
+    def test_summarize_records_comparison_identity_without_host_paths(self):
+        out = self.summarize_to("run", [33 * MS, 34 * MS], package="download-abc", driver_info="Mesa 9.9 (git-1)")
+        text = out.read_text(encoding="utf-8")
+        result = json.loads(text)["results"][0]
+        self.assertEqual(result["route"], "forest_walk")
+        self.assertEqual(result["device"]["driver_package"], "download-abc")
+        self.assertEqual(result["device"]["driver_info"], "Mesa 9.9 (git-1)")
+        self.assertNotIn("/data/data", text.replace(result["log"], ""))
+
+    def test_summarize_labels_the_system_driver(self):
+        out = self.summarize_to("run", [33 * MS], package="system")
+        result = json.loads(out.read_text(encoding="utf-8"))["results"][0]
+        self.assertEqual(result["device"]["driver_package"], "system")
+
+    def test_summaries_compare_and_catch_a_slow_frame(self):
+        baseline = self.summarize_to("baseline", [33 * MS] * 10)
+        same = self.summarize_to("same", [33 * MS] * 10)
+        slower = self.summarize_to("slower", [33 * MS] * 9 + [60 * MS])
+        self.assertEqual(run_tool("compare", baseline, same).returncode, 0)
+        result = run_tool("compare", baseline, slower)
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertEqual(self.last_line(result), "RESULT: regression (p99_ms, over_50ms)")
+
+    def test_same_mesa_commit_from_different_packages_is_a_mismatch(self):
+        regular = self.summarize_to("regular", [33 * MS] * 3, package="download-regular")
+        patched = self.summarize_to("patched", [33 * MS] * 3, package="download-patched")
+        self.assert_refused(run_tool("compare", regular, patched), "driver package")
+
+
 if __name__ == "__main__":
     unittest.main()

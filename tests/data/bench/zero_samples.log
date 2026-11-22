@@ -1,0 +1,2 @@
+[2026-01-01 00:00:00.000] [info] [gpu] [t1] SWAPTIMING_BEGIN version=1 samples=0 frame_limit=30 vsync=true clock=steady_ns meaning=cpu_swap_processing
+[2026-01-01 00:00:00.000] [info] [gpu] [t1] SWAPTIMING_END samples=0

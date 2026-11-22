@@ -1,0 +1,4 @@
+[2026-01-01 00:00:00.000] [info] [core] [t1] Vulkan device 'Synthetic GPU': API 1.3.0, vendor 0x5143, device 0x1, driver version 0x2
+[2026-01-01 00:00:00.000] [info] [gpu] [t1] GUESTFPS fps=29.0 frames=145 worst_ms=45.5
+[2026-01-01 00:00:00.000] [info] [gpu] [t1] GUESTFPS fps=30.0 frames=150 worst_ms=60.2
+[2026-01-01 00:00:00.000] [info] [gpu] [t1] GUESTFPS fps=20.0 frames=100 worst_ms=120.7

@@ -500,7 +500,7 @@ The SDK patch still carries 26 `TEMPDIAG` lines from the original black-screen b
 ~~~
 
 ### T-008 · Rebuild the frame-timing analyzer in the repo
-- status: todo
+- status: done
 - priority: P0
 - depends_on: T-001
 - size: M
@@ -2366,3 +2366,4 @@ Read on 2026-11-21. Check them again before relying on a detail.
 - **2026-11-21** (Gemini 4 Neon): Completed `T-001` (`.github/workflows/ci.yml` with `actions/checkout@v7` and `actions/setup-java@v6` Temurin JDK 21). Verified all three offline checks locally on Windows without relying on GitHub Actions runners (`generate_game_versions.py --check` 0.16s, 7 Python unit tests 0.49s, Gradle `:app:testDebugUnitTest --no-daemon` 56.83s cold including Android 35 SDK platform install).
 - **2026-11-21** (Gemini 4 Neon): Completed `T-002` (`tools/sdk_patch.py` with Windows CRLF-patch fallback + atomic LF export, `tests/test_sdk_patch.py`, `.gitignore`, `.github/workflows/ci.yml`, `README.md`, `android/README.md`). Verified locally on Windows: `sdk_patch.py check` passed on `thirdparty/rexglue-sdk-android.patch` (`pinned=cc5f03dd0488 tree=b18be95f4019`), 12/12 Python unit tests passed, `generate_game_versions.py --check` passed, and Gradle `:app:testDebugUnitTest` passed.
 - **2026-11-22** (Claude Opus 5.5): Completed `T-016` (`docs/investigations/adreno8xx-triage.md`). Triaged all 18 upstream runs (5 logs from issue #1, 13 from `logs.zip` on issue #5), checked all quoted log lines against the source logs, and deleted the temporary downloads. Only Turnip Gen8 V38_Patched reached post-intro content, and it was never run on Adreno 840. Hypotheses are ranked for T-022 and T-023 but not yet tested on the owner's devices. Offline checks passed: version table, 12/12 Python tests, `sdk_patch.py check`, and Gradle `:app:testDebugUnitTest`.
+- **2026-11-22** (Claude Opus 5.5): Completed `T-008` (`tools/bench/analyze.py`, `tests/test_bench_analyze.py`, synthetic fixtures in `tests/data/bench/`, `docs/BENCHMARKING.md`, `.gitignore`). The analyzer summarizes `SWAPTIMING` captures, falls back to `GUESTFPS` windows, and rejects damaged captures. Verified on synthetic logs only; it has not yet read a real device capture. Offline checks passed: version table, 33/33 Python tests, `sdk_patch.py check`, and Gradle `:app:testDebugUnitTest`.

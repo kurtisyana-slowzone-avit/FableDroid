@@ -879,7 +879,7 @@ FableDroid splits configuration across two files: `Settings.java` writes 21 `TUN
 ~~~
 
 ### T-018 · GPU profile model in the launcher
-- status: todo
+- status: done
 - priority: P0
 - depends_on: T-017
 - size: M
@@ -2369,3 +2369,4 @@ Read on 2026-11-21. Check them again before relying on a detail.
 - **2026-11-22** (Claude Opus 5.5): Completed `T-008` (`tools/bench/analyze.py`, `tests/test_bench_analyze.py`, synthetic fixtures in `tests/data/bench/`, `docs/BENCHMARKING.md`, `.gitignore`). The analyzer summarizes `SWAPTIMING` captures, falls back to `GUESTFPS` windows, and rejects damaged captures. Verified on synthetic logs only; it has not yet read a real device capture. Offline checks passed: version table, 33/33 Python tests, `sdk_patch.py check`, and Gradle `:app:testDebugUnitTest`.
 - **2026-11-22** (Claude Opus 5.5): Completed `T-015` (`tools/bench/analyze.py compare`, `tests/test_bench_analyze.py`, `docs/BENCHMARKING.md`). The gate enforces the median FPS, p99 and slow-frame limits, prints any limit overrides, and refuses results that differ in GPU, driver, present mode, route, frame limit, vsync or capture length unless `--allow-mismatch` is given. Summaries now record the route, driver package and driver info. Verified on synthetic results only; no real baseline exists until T-014. Offline checks passed: version table, 57/57 Python tests, `sdk_patch.py check`, and Gradle `:app:testDebugUnitTest`.
 - **2026-11-22** (Claude Opus 5.5): Completed `T-017` (`docs/RENDERER_OPTIONS.md`, `tests/test_renderer_options_doc.py`). Documented 82 options across launcher-managed keys, SDK patch cvars, seeded cvars, and `[patches]`/`[perf]` settings, with code-proven reference values and one `unknown` (`spirv_exponent_bias_bits`). Found that `dog_fur_depth_bias` has no effect on Android because its cvars exist only in the D3D12 backend. Values come from code and upstream notes, not device tests. Offline checks passed: version table, 72/72 Python tests, `sdk_patch.py check`, and Gradle `:app:testDebugUnitTest`.
+- **2026-11-22** (Claude Opus 5.5): Completed `T-018` (`GpuProfile.java`, `Settings.java`, `GpuProfileTest.java`, `docs/RENDERER_OPTIONS.md`, and the `tests/test_renderer_options_doc.py` table source). `AUTO` output is proven byte-identical to a frozen copy of the previous launcher logic across the bench GPUs, driver types and launcher settings. `COMPATIBILITY` uses reference values for managed keys but keeps the selected driver so it can be tested on Turnip, and ten unmanaged options remain away from their reference values. Not yet run on a device. Offline checks passed: version table, 73/73 Python tests, `sdk_patch.py check`, 22/22 launcher unit tests, and a debug compile.

@@ -1,0 +1,82 @@
+[2026-01-01 00:00:00.000] [info] [core] [t1] Vulkan device 'Synthetic GPU': API 1.3.0, vendor 0x5143, device 0x1, driver version 0x2
+[2026-01-01 00:00:00.000] [info] [core] [t1] Enabled Vulkan device extensions:
+[2026-01-01 00:00:00.000] [info] [core] [t1] VulkanPresenter: Created 1280x720 swapchain with format 37, color space 0, presentation mode 2
+[2026-01-01 00:00:00.000] [info] [gpu] [t1] TEMPDIAG: SWAPTIMING row=0 sample_ns=1 limiter_ns=1 issue_ns=1 wait_ns=1 wait_packets=1
+[2026-01-01 00:00:00.000] [info] [gpu] [t1] SWAPTIMINGX row=0 sample_ns=1
+[2026-01-01 00:00:00.000] [info] [gpu] [t1] Unrelated renderer message
+[2026-01-01 00:00:00.000] [info] [gpu] [t1] GUESTFPS fps=29.9 frames=150 worst_ms=40.1
+[2026-01-01 00:00:00.000] [info] [gpu] [t1] SWAPQUEUE swaps=150 guest_to_cp_ms avg=1.5 max=4.0 queued avg=0.25 max=1 max_ahead=1
+[2026-01-01 00:00:00.000] [info] [gpu] [t1] GPUSTAT per-frame: rp_begins=140.0 submits=2.0 waits=1.0 wait_ms=3.5 upload_kb=12 upload_calls=4.0 in_order=1.0 subpage=0.0 wait_sems=1.0 | draws=900.0 pred_exec=1.0 pred_skip=0.0 bin_sel_changes=0.0 bin_sel_union=0x0 | rp_end L10x2 | wait L20x1 | push_in_rp | submit_in_rp
+[2026-01-01 00:00:00.000] [info] [gpu] [t1] GPUTIME calibration: device_period_ns=52.08333206176758 valid_bits=48 queue_family=0
+[2026-01-01 00:00:00.000] [info] [gpu] [t1] GPUTIME shaders(1): [vs0000000000000001 ps0000000000000002 dr3 ix4]
+[2026-01-01 00:00:00.000] [info] [gpu] [t1] GPUTIME span=30.50ms marks=12 | [main 20.00ms n1 dr3 vx4] | top: [#0 main 20.00ms dr3]
+[2026-01-01 00:00:00.000] [info] [gpu] [t1] GUESTFPS fps=30.1 frames=151 worst_ms=33.4
+[2026-01-01 00:00:00.000] [info] [gpu] [t1] SWAPQUEUE swaps=151 guest_to_cp_ms avg=2.5 max=9.5 queued avg=0.50 max=2 max_ahead=1
+[2026-01-01 00:00:00.000] [info] [gpu] [t1] GPUTIME span=35.20ms marks=12 | [main 25.00ms n1 dr3 vx4] | top: [#0 main 25.00ms dr3]
+[2026-01-01 00:00:00.000] [info] [gpu] [t1] GUESTFPS fps=25.0 frames=125 worst_ms=100.1
+[2026-01-01 00:00:00.000] [info] [gpu] [t1] SWAPTIMING_BEGIN version=1 samples=21 frame_limit=30 vsync=true clock=steady_ns meaning=cpu_swap_processing
+[2026-01-01 00:00:00.000] [info] [gpu] [t1] SWAPTIMING row=0 sample_ns=1000000000 limiter_ns=999000000 issue_ns=999000000 wait_ns=999000000 wait_packets=1
+[2026-01-01 00:00:00.000] [info] [gpu] [t1] SWAPTIMING2 row=0 stall_ns=999000000 draw_ns=999000000 throttle_ns=999000000 draws=10
+[2026-01-01 00:00:00.000] [info] [gpu] [t1] SWAPTIMING3 row=0 fence_wait_ns=999000000 fence_poll_ns=999000000 fence_waits=1 fence_polls=2
+[2026-01-01 00:00:00.000] [info] [gpu] [t1] SWAPTIMING row=1 sample_ns=1033300000 limiter_ns=1000000 issue_ns=2000000 wait_ns=3000000 wait_packets=1
+[2026-01-01 00:00:00.000] [info] [gpu] [t1] SWAPTIMING2 row=1 stall_ns=4000000 draw_ns=5000000 throttle_ns=6000000 draws=10
+[2026-01-01 00:00:00.000] [info] [gpu] [t1] SWAPTIMING3 row=1 fence_wait_ns=7000000 fence_poll_ns=8000000 fence_waits=1 fence_polls=2
+[2026-01-01 00:00:00.000] [info] [gpu] [t1] SWAPTIMING row=2 sample_ns=1066600000 limiter_ns=1000000 issue_ns=2000000 wait_ns=3000000 wait_packets=1
+[2026-01-01 00:00:00.000] [info] [gpu] [t1] SWAPTIMING2 row=2 stall_ns=4000000 draw_ns=5000000 throttle_ns=6000000 draws=10
+[2026-01-01 00:00:00.000] [info] [gpu] [t1] SWAPTIMING3 row=2 fence_wait_ns=7000000 fence_poll_ns=8000000 fence_waits=1 fence_polls=2
+[2026-01-01 00:00:00.000] [info] [gpu] [t1] SWAPTIMING row=3 sample_ns=1099900000 limiter_ns=1000000 issue_ns=2000000 wait_ns=3000000 wait_packets=1
+[2026-01-01 00:00:00.000] [info] [gpu] [t1] SWAPTIMING2 row=3 stall_ns=4000000 draw_ns=5000000 throttle_ns=6000000 draws=10
+[2026-01-01 00:00:00.000] [info] [gpu] [t1] SWAPTIMING3 row=3 fence_wait_ns=7000000 fence_poll_ns=8000000 fence_waits=1 fence_polls=2
+[2026-01-01 00:00:00.000] [info] [gpu] [t1] SWAPTIMING row=4 sample_ns=1133200000 limiter_ns=1000000 issue_ns=2000000 wait_ns=3000000 wait_packets=1
+[2026-01-01 00:00:00.000] [info] [gpu] [t1] SWAPTIMING2 row=4 stall_ns=4000000 draw_ns=5000000 throttle_ns=6000000 draws=10
+[2026-01-01 00:00:00.000] [info] [gpu] [t1] SWAPTIMING3 row=4 fence_wait_ns=7000000 fence_poll_ns=8000000 fence_waits=1 fence_polls=2
+[2026-01-01 00:00:00.000] [info] [gpu] [t1] SWAPTIMING row=5 sample_ns=1166500000 limiter_ns=1000000 issue_ns=2000000 wait_ns=3000000 wait_packets=1
+[2026-01-01 00:00:00.000] [info] [gpu] [t1] SWAPTIMING2 row=5 stall_ns=4000000 draw_ns=5000000 throttle_ns=6000000 draws=10
+[2026-01-01 00:00:00.000] [info] [gpu] [t1] SWAPTIMING3 row=5 fence_wait_ns=7000000 fence_poll_ns=8000000 fence_waits=1 fence_polls=2
+[2026-01-01 00:00:00.000] [warning] [krnl] [t2] Interleaved line from another thread
+[2026-01-01 00:00:00.000] [info] [gpu] [t1] SWAPTIMING row=6 sample_ns=1199800000 limiter_ns=1000000 issue_ns=2000000 wait_ns=3000000 wait_packets=1
+[2026-01-01 00:00:00.000] [info] [gpu] [t1] SWAPTIMING2 row=6 stall_ns=4000000 draw_ns=5000000 throttle_ns=6000000 draws=10
+[2026-01-01 00:00:00.000] [info] [gpu] [t1] SWAPTIMING3 row=6 fence_wait_ns=7000000 fence_poll_ns=8000000 fence_waits=1 fence_polls=2
+[2026-01-01 00:00:00.000] [info] [gpu] [t1] SWAPTIMING row=7 sample_ns=1233100000 limiter_ns=1000000 issue_ns=2000000 wait_ns=3000000 wait_packets=1
+[2026-01-01 00:00:00.000] [info] [gpu] [t1] SWAPTIMING2 row=7 stall_ns=4000000 draw_ns=5000000 throttle_ns=6000000 draws=10
+[2026-01-01 00:00:00.000] [info] [gpu] [t1] SWAPTIMING3 row=7 fence_wait_ns=7000000 fence_poll_ns=8000000 fence_waits=1 fence_polls=2
+[2026-01-01 00:00:00.000] [info] [gpu] [t1] SWAPTIMING row=8 sample_ns=1266400000 limiter_ns=1000000 issue_ns=2000000 wait_ns=3000000 wait_packets=1
+[2026-01-01 00:00:00.000] [info] [gpu] [t1] SWAPTIMING2 row=8 stall_ns=4000000 draw_ns=5000000 throttle_ns=6000000 draws=10
+[2026-01-01 00:00:00.000] [info] [gpu] [t1] SWAPTIMING3 row=8 fence_wait_ns=7000000 fence_poll_ns=8000000 fence_waits=1 fence_polls=2
+[2026-01-01 00:00:00.000] [info] [gpu] [t1] SWAPTIMING row=9 sample_ns=1306400000 limiter_ns=1000000 issue_ns=2000000 wait_ns=3000000 wait_packets=1
+[2026-01-01 00:00:00.000] [info] [gpu] [t1] SWAPTIMING2 row=9 stall_ns=4000000 draw_ns=5000000 throttle_ns=6000000 draws=10
+[2026-01-01 00:00:00.000] [info] [gpu] [t1] SWAPTIMING3 row=9 fence_wait_ns=7000000 fence_poll_ns=8000000 fence_waits=1 fence_polls=2
+[2026-01-01 00:00:00.000] [info] [gpu] [t1] SWAPTIMING row=10 sample_ns=1339700000 limiter_ns=1000000 issue_ns=2000000 wait_ns=3000000 wait_packets=1
+[2026-01-01 00:00:00.000] [info] [gpu] [t1] SWAPTIMING2 row=10 stall_ns=4000000 draw_ns=5000000 throttle_ns=6000000 draws=10
+[2026-01-01 00:00:00.000] [info] [gpu] [t1] SWAPTIMING3 row=10 fence_wait_ns=7000000 fence_poll_ns=8000000 fence_waits=1 fence_polls=2
+[2026-01-01 00:00:00.000] [info] [gpu] [t1] SWAPTIMING row=11 sample_ns=1373000000 limiter_ns=1000000 issue_ns=2000000 wait_ns=3000000 wait_packets=1
+[2026-01-01 00:00:00.000] [info] [gpu] [t1] SWAPTIMING2 row=11 stall_ns=4000000 draw_ns=5000000 throttle_ns=6000000 draws=10
+[2026-01-01 00:00:00.000] [info] [gpu] [t1] SWAPTIMING3 row=11 fence_wait_ns=7000000 fence_poll_ns=8000000 fence_waits=1 fence_polls=2
+[2026-01-01 00:00:00.000] [info] [gpu] [t1] SWAPTIMING row=12 sample_ns=1406300000 limiter_ns=1000000 issue_ns=2000000 wait_ns=3000000 wait_packets=1
+[2026-01-01 00:00:00.000] [info] [gpu] [t1] SWAPTIMING2 row=12 stall_ns=4000000 draw_ns=5000000 throttle_ns=6000000 draws=10
+[2026-01-01 00:00:00.000] [info] [gpu] [t1] SWAPTIMING3 row=12 fence_wait_ns=7000000 fence_poll_ns=8000000 fence_waits=1 fence_polls=2
+[2026-01-01 00:00:00.000] [info] [gpu] [t1] SWAPTIMING row=13 sample_ns=1439600000 limiter_ns=1000000 issue_ns=2000000 wait_ns=3000000 wait_packets=1
+[2026-01-01 00:00:00.000] [info] [gpu] [t1] SWAPTIMING2 row=13 stall_ns=4000000 draw_ns=5000000 throttle_ns=6000000 draws=10
+[2026-01-01 00:00:00.000] [info] [gpu] [t1] SWAPTIMING3 row=13 fence_wait_ns=7000000 fence_poll_ns=8000000 fence_waits=1 fence_polls=2
+[2026-01-01 00:00:00.000] [info] [gpu] [t1] SWAPTIMING row=14 sample_ns=1539700000 limiter_ns=1000000 issue_ns=2000000 wait_ns=3000000 wait_packets=1
+[2026-01-01 00:00:00.000] [info] [gpu] [t1] SWAPTIMING2 row=14 stall_ns=4000000 draw_ns=5000000 throttle_ns=6000000 draws=10
+[2026-01-01 00:00:00.000] [info] [gpu] [t1] SWAPTIMING3 row=14 fence_wait_ns=7000000 fence_poll_ns=8000000 fence_waits=1 fence_polls=2
+[2026-01-01 00:00:00.000] [info] [gpu] [t1] SWAPTIMING row=15 sample_ns=1573000000 limiter_ns=1000000 issue_ns=2000000 wait_ns=3000000 wait_packets=1
+[2026-01-01 00:00:00.000] [info] [gpu] [t1] SWAPTIMING2 row=15 stall_ns=4000000 draw_ns=5000000 throttle_ns=6000000 draws=10
+[2026-01-01 00:00:00.000] [info] [gpu] [t1] SWAPTIMING3 row=15 fence_wait_ns=7000000 fence_poll_ns=8000000 fence_waits=1 fence_polls=2
+[2026-01-01 00:00:00.000] [info] [gpu] [t1] SWAPTIMING row=16 sample_ns=1606300000 limiter_ns=1000000 issue_ns=2000000 wait_ns=3000000 wait_packets=1
+[2026-01-01 00:00:00.000] [info] [gpu] [t1] SWAPTIMING2 row=16 stall_ns=4000000 draw_ns=5000000 throttle_ns=6000000 draws=10
+[2026-01-01 00:00:00.000] [info] [gpu] [t1] SWAPTIMING3 row=16 fence_wait_ns=7000000 fence_poll_ns=8000000 fence_waits=1 fence_polls=2
+[2026-01-01 00:00:00.000] [info] [gpu] [t1] SWAPTIMING row=17 sample_ns=1646400000 limiter_ns=1000000 issue_ns=2000000 wait_ns=3000000 wait_packets=1
+[2026-01-01 00:00:00.000] [info] [gpu] [t1] SWAPTIMING2 row=17 stall_ns=4000000 draw_ns=5000000 throttle_ns=6000000 draws=10
+[2026-01-01 00:00:00.000] [info] [gpu] [t1] SWAPTIMING3 row=17 fence_wait_ns=7000000 fence_poll_ns=8000000 fence_waits=1 fence_polls=2
+[2026-01-01 00:00:00.000] [info] [gpu] [t1] SWAPTIMING row=18 sample_ns=1679700000 limiter_ns=1000000 issue_ns=2000000 wait_ns=3000000 wait_packets=1
+[2026-01-01 00:00:00.000] [info] [gpu] [t1] SWAPTIMING2 row=18 stall_ns=4000000 draw_ns=5000000 throttle_ns=6000000 draws=10
+[2026-01-01 00:00:00.000] [info] [gpu] [t1] SWAPTIMING3 row=18 fence_wait_ns=7000000 fence_poll_ns=8000000 fence_waits=1 fence_polls=2
+[2026-01-01 00:00:00.000] [info] [gpu] [t1] SWAPTIMING row=19 sample_ns=1713000000 limiter_ns=1000000 issue_ns=2000000 wait_ns=3000000 wait_packets=1
+[2026-01-01 00:00:00.000] [info] [gpu] [t1] SWAPTIMING2 row=19 stall_ns=4000000 draw_ns=5000000 throttle_ns=6000000 draws=10
+[2026-01-01 00:00:00.000] [info] [gpu] [t1] SWAPTIMING3 row=19 fence_wait_ns=7000000 fence_poll_ns=8000000 fence_waits=1 fence_polls=2
+[2026-01-01 00:00:00.000] [info] [gpu] [t1] SWAPTIMING row=20 sample_ns=1763100000 limiter_ns=1000000 issue_ns=2000000 wait_ns=3000000 wait_packets=1
+[2026-01-01 00:00:00.000] [info] [gpu] [t1] SWAPTIMING2 row=20 stall_ns=4000000 draw_ns=5000000 throttle_ns=6000000 draws=10
+[2026-01-01 00:00:00.000] [info] [gpu] [t1] SWAPTIMING3 row=20 fence_wait_ns=7000000 fence_poll_ns=8000000 fence_waits=1 fence_polls=2
+[2026-01-01 00:00:00.000] [info] [gpu] [t1] SWAPTIMING_END samples=21

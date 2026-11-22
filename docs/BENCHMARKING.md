@@ -1,9 +1,9 @@
 # Benchmarking
 
-`tools/bench/analyze.py` turns FableDroid runtime logs into a JSON summary. It uses only the Python standard library and needs no device, game files or network.
+`tools/bench/analyze.py` turns FableDroid runtime logs into a JSON summary and gates one result against another. It uses only the Python standard library and needs no device, game files or network.
 
 ```powershell
-py -3 tools/bench/analyze.py summarize fable_2_001.log --out result.json
+py -3 tools/bench/analyze.py summarize fable_2_001.log --route forest_walk --out result.json
 ```
 
 On Linux and macOS, use `python3` instead of `py -3`.
@@ -12,9 +12,10 @@ On Linux and macOS, use `python3` instead of `py -3`.
 |---|---|
 | `<log> [<log> ...]` | One or more log files. Each gets its own entry in `results`; logs are never merged. |
 | `--out <file>` | Also write the JSON to this file. The write is atomic, and nothing is written if any log fails. |
+| `--route <name>` | Name of the benchmark route. `compare` needs it to confirm two runs are comparable. |
 | `--window-seconds <n>` | Window length for capture summaries. The default is 5. |
 
-The command exits with `0` on success, `1` when a log cannot produce a trustworthy result, and `2` for invalid arguments.
+`summarize` exits with `0` on success, `1` when a log cannot produce a trustworthy result, and `2` for invalid arguments.
 
 ## Records and the settings that produce them
 
@@ -38,13 +39,13 @@ A capture runs once per launch and holds its output until it finishes. The swaps
 
 ### Android launcher limitation
 
-The launcher rewrites `fable_2.toml` on every launch, which affects these settings today:
+The launcher's Play button rewrites `fable_2.toml`, which affects these settings:
 
 - `capture_swap_timing_frames` is deleted.
 - `log_gpu_diagnostics` is forced to `false`.
 - `log_guest_fps_seconds` is forced to `0` unless the `log_fps` preference is set, and that preference has no UI control.
 
-Collecting these records from a normal launcher start therefore needs a debug launcher that leaves them alone. T-010 and T-019 are the planned routes.
+Debug builds avoid this when `LauncherActivity` is started with `--ez benchmark true`, because that path opens the game without rewriting the file. The T-010 device runner is planned to use it.
 
 ## Metrics
 
@@ -60,7 +61,10 @@ Collecting these records from a normal launcher start therefore needs a debug la
 | `metrics.windows` | Per-window results |
 | `components_ms` | Median, p95, p99 and maximum for each `SWAPTIMING` component |
 | `periodic` | Summaries of `GUESTFPS`, `SWAPQUEUE`, `GPUSTAT` and `GPUTIME`, or `null` when absent |
-| `device` | `Vulkan device` and `Created ... swapchain` lines, which identify the GPU, driver and present mode |
+| `route` | The `--route` name, or `null` |
+| `device.vulkan_devices`, `device.swapchains` | `Vulkan device` and `Created ... swapchain` lines, which identify the GPU, driver version and present mode |
+| `device.driver_package` | Custom driver package id, or `system`. Turnip packages can share a Mesa version, so this is what tells them apart |
+| `device.driver_info` | The driver's `driverInfo` string |
 | `log_sha256`, `tool_version` | The exact input and analyzer version |
 | `warnings` | Malformed auxiliary records that were skipped |
 
@@ -79,6 +83,82 @@ Collecting these records from a normal launcher start therefore needs a debug la
 ### What these numbers do not measure
 
 `SWAPTIMING` measures guest swap processing on the CPU command worker, as its `meaning=cpu_swap_processing` field states. It does not measure when a frame reached the display, so it cannot prove even display cadence on its own. T-030 covers displayed-frame measurement.
+
+## Regression gate
+
+`compare` checks a candidate result against a baseline result. Each file must come from `summarize` and hold exactly one `SWAPTIMING` result.
+
+```powershell
+py -3 tools/bench/analyze.py compare baseline.json candidate.json
+```
+
+| Exit code | Meaning |
+|---|---|
+| `0` | Every gated metric is within its limit |
+| `1` | At least one gated metric regressed |
+| `2` | The comparison was refused, or an argument or input file is invalid |
+
+### Limits
+
+A value exactly at a limit passes. Percent limits are measured against the baseline value.
+
+| Metric | Default limit | Override |
+|---|---|---|
+| Median FPS | May fall by at most 1% | `--max-fps-drop-pct <pct>` |
+| P99 frame time | May rise by at most 5% | `--max-p99-rise-pct <pct>` |
+| Frames over 50 ms | May not rise | `--max-over-50ms-rise <n>` |
+| Frames over 100 ms | May not rise | `--max-over-100ms-rise <n>` |
+
+Each override is printed above the table. Median, p95 and worst frame time and frames over 40 ms appear in the table as `info` and do not fail the gate. A slow-frame count with a zero baseline has no percentage, so its change shows as `n/a`.
+
+### When a comparison is refused
+
+`compare` refuses results whose identity differs or cannot be confirmed:
+
+- GPU
+- Driver version, package or `driverInfo`
+- Present mode
+- Route
+- Frame limit or vsync
+- Capture sample count
+
+`--allow-mismatch` runs the comparison anyway and prints every difference above the table. Use it only for a deliberate cross-configuration comparison, because it does not prove that a change is free of regressions.
+
+`GUESTFPS` results are always refused, even with `--allow-mismatch`, because they have no per-frame p99 or slow-frame counts.
+
+### Pull request snippet
+
+Copy this into the pull request and paste the command's table and `RESULT` line where shown:
+
+```markdown
+### Regression gate
+
+- Device and display mode:
+- Driver:
+- Route and cache state:
+- Baseline: `docs/perf/baselines/<run>/result.json`
+- Candidate: `docs/perf/runs/<run>/result.json`
+- Limit overrides or allowed mismatches, with the reason: none
+
+<paste the table and RESULT line here>
+```
+
+Example output from synthetic results:
+
+```text
+| Metric      | Baseline | Candidate |        Change | Limit | Status     |
+| ----------- | -------: | --------: | ------------: | ----: | ---------- |
+| Median FPS  |     30.0 |      29.8 |  -0.2 (-0.7%) |   -1% | pass       |
+| Median ms   |     33.3 |      33.5 |  +0.2 (+0.6%) |     - | info       |
+| P95 ms      |     36.0 |      36.5 |  +0.5 (+1.4%) |     - | info       |
+| P99 ms      |     40.0 |      43.0 |  +3.0 (+7.5%) |   +5% | REGRESSION |
+| Worst ms    |     45.0 |      52.0 | +7.0 (+15.6%) |     - | info       |
+| Over 40 ms  |        2 |         4 |  +2 (+100.0%) |     - | info       |
+| Over 50 ms  |        1 |         2 |  +1 (+100.0%) |    +0 | REGRESSION |
+| Over 100 ms |        0 |         0 |      +0 (n/a) |    +0 | pass       |
+
+RESULT: regression (p99_ms, over_50ms)
+```
 
 ## Rejected logs
 

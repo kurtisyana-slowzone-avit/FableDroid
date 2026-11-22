@@ -13,6 +13,7 @@ import argparse
 from decimal import Decimal, ROUND_HALF_UP
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -20,7 +21,7 @@ import sys
 import tempfile
 
 TOOL_NAME = "fabledroid-bench-analyze"
-TOOL_VERSION = "1.0.0"
+TOOL_VERSION = "1.1.0"
 CAPTURE_VERSION = "1"
 DEFAULT_WINDOW_SECONDS = 5
 NS_PER_MS = 1_000_000
@@ -71,6 +72,36 @@ GPUTIME_SPAN = re.compile(rf"span=(?P<span>{NUM})ms marks=\d+ \|.*")
 VULKAN_DEVICE = re.compile(r"Vulkan device '")
 SWAPCHAIN = re.compile(r"(?:VulkanPresenter: )?Created \S+ swapchain\b")
 COMPONENTS = ("limiter", "issue", "wait", "stall", "draw", "throttle", "fence_wait", "fence_poll")
+CUSTOM_DRIVER = re.compile(r"Loaded custom Vulkan driver \S*?gpu_drivers/([^/\s]+)/")
+DRIVER_INFO = re.compile(r"\* driverInfo: (.+)")
+VULKAN_DEVICE_FIELDS = re.compile(
+    r"Vulkan device '(?P<name>[^']+)': API [\d.]+, vendor (?P<vendor>0x[0-9A-Fa-f]+), "
+    r"device (?P<device>0x[0-9A-Fa-f]+), driver version (?P<version>0x[0-9A-Fa-f]+)"
+)
+PRESENT_MODE = re.compile(r"presentation mode (\d+)")
+
+EXIT_PASS = 0
+EXIT_REGRESSION = 1
+EXIT_REFUSED = 2
+COMPARE_ROWS = (
+    ("median_fps", "Median FPS"),
+    ("median_ms", "Median ms"),
+    ("p95_ms", "P95 ms"),
+    ("p99_ms", "P99 ms"),
+    ("worst_ms", "Worst ms"),
+    ("over_40ms", "Over 40 ms"),
+    ("over_50ms", "Over 50 ms"),
+    ("over_100ms", "Over 100 ms"),
+)
+COUNT_METRICS = ("over_40ms", "over_50ms", "over_100ms")
+POSITIVE_METRICS = ("median_fps", "p99_ms")
+DEFAULT_LIMITS = {"median_fps": Decimal(1), "p99_ms": Decimal(5), "over_50ms": 0, "over_100ms": 0}
+LIMIT_TEXT = {
+    "median_fps": "may fall by at most {}%",
+    "p99_ms": "may rise by at most {}%",
+    "over_50ms": "may rise by at most {}",
+    "over_100ms": "may rise by at most {}",
+}
 
 
 class AnalyzeError(Exception):
@@ -310,7 +341,7 @@ def parse_gputime(body):
     return None
 
 
-def summarize_log(path, window_seconds):
+def summarize_log(path, window_seconds, route=None):
     try:
         data = path.read_bytes()
     except OSError as exc:
@@ -323,6 +354,7 @@ def summarize_log(path, window_seconds):
     malformed_guest = []
     warnings = []
     devices, swapchains = [], []
+    driver_package, driver_info = None, None
 
     for line_number, raw in enumerate(data.decode("utf-8", "replace").split("\n"), start=1):
         line = LOG_PREFIX.sub("", raw.rstrip("\r"), count=1)
@@ -330,6 +362,11 @@ def summarize_log(path, window_seconds):
             devices.append(line)
         elif SWAPCHAIN.match(line):
             swapchains.append(line)
+        elif driver_package is None and (custom := CUSTOM_DRIVER.match(line)):
+            # Keep only the package id: the full path is a device path.
+            driver_package = custom.group(1)
+        elif driver_info is None and (info := DRIVER_INFO.fullmatch(line)):
+            driver_info = info.group(1).strip()
         record = RECORD.fullmatch(line)
         if not record:
             continue
@@ -368,7 +405,7 @@ def summarize_log(path, window_seconds):
         else:
             stats.append(match.groupdict())
 
-    result = {"log": path.name, "log_sha256": hashlib.sha256(data).hexdigest()}
+    result = {"log": path.name, "log_sha256": hashlib.sha256(data).hexdigest(), "route": route}
     if capture.present:
         rows = capture.validated_rows()
         result["source"] = "SWAPTIMING"
@@ -391,9 +428,203 @@ def summarize_log(path, window_seconds):
         raise AnalyzeError("no frame-timing records found (need SWAPTIMING or GUESTFPS)")
 
     result["periodic"] = periodic_summary(guest, queue, stats, spans, shader_reports, calibration)
-    result["device"] = {"vulkan_devices": devices, "swapchains": swapchains}
+    result["device"] = {
+        "vulkan_devices": devices,
+        "swapchains": swapchains,
+        "driver_package": driver_package or ("system" if devices else None),
+        "driver_info": driver_info,
+    }
     result["warnings"] = warnings
     return result
+
+
+def load_result(path):
+    """Load a one-result summary and return it with its validated gate metrics."""
+    name = path.name
+    try:
+        text = path.read_bytes().decode("utf-8-sig")
+    except OSError as exc:
+        raise AnalyzeError(f"{name}: cannot read result: {exc.strerror or exc}") from exc
+    except UnicodeDecodeError as exc:
+        raise AnalyzeError(f"{name}: result is not UTF-8 JSON") from exc
+
+    def reject_constant(constant):
+        raise ValueError(f"{constant} is not a valid metric value")
+
+    try:
+        report = json.loads(text, parse_constant=reject_constant)
+    except (ValueError, RecursionError) as exc:
+        raise AnalyzeError(f"{name}: not a valid result file: {exc}") from exc
+    results = report.get("results") if isinstance(report, dict) else None
+    if not isinstance(results, list) or len(results) != 1 or not isinstance(results[0], dict):
+        raise AnalyzeError(f"{name}: result file must contain exactly one result")
+    result = results[0]
+    if result.get("source") != "SWAPTIMING":
+        raise AnalyzeError(
+            f"{name}: the gate needs a SWAPTIMING capture (found {clean(result.get('source'))}); "
+            "GUESTFPS has no per-frame p99 or slow-frame counts"
+        )
+    raw = result.get("metrics")
+    if not isinstance(raw, dict):
+        raise AnalyzeError(f"{name}: result has no metrics")
+    metrics = {}
+    for key, _ in COMPARE_ROWS:
+        value = raw.get(key)
+        if key in COUNT_METRICS:
+            if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+                raise AnalyzeError(f"{name}: metric {key} must be a non-negative whole number")
+            metrics[key] = value
+            continue
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value < 0:
+            raise AnalyzeError(f"{name}: metric {key} must be a non-negative number")
+        if key in POSITIVE_METRICS and value == 0:
+            raise AnalyzeError(f"{name}: metric {key} must be greater than zero")
+        metrics[key] = Decimal(str(value))
+    return result, metrics
+
+
+def clean(value):
+    """Render a value from a result file on one line."""
+    return " ".join(str(value).split())
+
+
+def result_identity(result):
+    """Return what must match for two results to be comparable; None means unknown."""
+    device = result.get("device") if isinstance(result.get("device"), dict) else {}
+    capture = result.get("capture") if isinstance(result.get("capture"), dict) else {}
+    lines = device.get("vulkan_devices")
+    lines = lines if isinstance(lines, list) else []
+    parsed = {m.groups() for m in (VULKAN_DEVICE_FIELDS.match(l) for l in lines if isinstance(l, str)) if m}
+    name, vendor, device_id, version = parsed.pop() if len(parsed) == 1 else (None, None, None, None)
+    swapchains = device.get("swapchains")
+    swapchains = swapchains if isinstance(swapchains, list) else []
+    modes = {m.group(1) for m in (PRESENT_MODE.search(l) for l in swapchains if isinstance(l, str)) if m}
+    identity = {
+        "gpu": f"{name} {vendor} {device_id}" if name else None,
+        "driver version": version,
+        "driver package": device.get("driver_package"),
+        "driver info": device.get("driver_info"),
+        "present mode": ",".join(sorted(modes, key=int)) if modes else None,
+        "route": result.get("route"),
+        "frame limit": capture.get("frame_limit"),
+        "vsync": capture.get("vsync"),
+        "capture samples": capture.get("samples"),
+    }
+    return {key: None if value is None else clean(value) for key, value in identity.items()}
+
+
+def identity_differences(baseline, candidate):
+    base, cand = result_identity(baseline), result_identity(candidate)
+    differences = []
+    for field in base:
+        if base[field] is None or cand[field] is None:
+            differences.append(f"{field} unknown (baseline={base[field]}, candidate={cand[field]})")
+        elif base[field] != cand[field]:
+            differences.append(f"{field} differs (baseline={base[field]}, candidate={cand[field]})")
+    return differences
+
+
+def is_regression(key, base, cand, limit):
+    if key == "median_fps":
+        return cand < base * (100 - limit) / 100
+    if key == "p99_ms":
+        return cand > base * (100 + limit) / 100
+    return cand - base > limit
+
+
+def one_decimal(value):
+    rounded = Decimal(value).quantize(Decimal("0.1"), rounding=ROUND_HALF_UP)
+    return abs(rounded) if rounded == 0 else rounded
+
+
+def change_text(key, base, cand):
+    delta = cand - base
+    amount = f"{delta:+d}" if key in COUNT_METRICS else format(one_decimal(delta), "+f")
+    if base == 0:
+        return f"{amount} (n/a)"
+    percent = one_decimal(Decimal(delta) * 100 / Decimal(base))
+    return f"{amount} ({format(percent, '+f')}%)"
+
+
+def limit_text(key, limits):
+    if key not in limits:
+        return "-"
+    if key in COUNT_METRICS:
+        return f"+{limits[key]}"
+    sign = "-" if key == "median_fps" else "+"
+    return f"{sign}{format(limits[key].normalize(), 'f')}%"
+
+
+def render_table(rows):
+    header = ("Metric", "Baseline", "Candidate", "Change", "Limit", "Status")
+    table = [header, *rows]
+    widths = [max(len(row[column]) for row in table) for column in range(len(header))]
+
+    def line(row):
+        cells = [row[0].ljust(widths[0])]
+        cells += [row[column].rjust(widths[column]) for column in range(1, 5)]
+        cells.append(row[5].ljust(widths[5]))
+        return "| " + " | ".join(cells) + " |"
+
+    separator = ["-" * widths[0]] + ["-" * (widths[c] - 1) + ":" for c in range(1, 5)] + ["-" * widths[5]]
+    return [line(header), "| " + " | ".join(separator) + " |", *[line(row) for row in rows]]
+
+
+def run_compare(args):
+    try:
+        baseline, base_metrics = load_result(args.baseline)
+        candidate, cand_metrics = load_result(args.candidate)
+    except AnalyzeError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return EXIT_REFUSED
+
+    differences = identity_differences(baseline, candidate)
+    if differences and not args.allow_mismatch:
+        print(
+            f"error: refusing to compare: {'; '.join(differences)}. Use --allow-mismatch to compare anyway.",
+            file=sys.stderr,
+        )
+        return EXIT_REFUSED
+
+    overrides = {
+        "median_fps": args.max_fps_drop_pct,
+        "p99_ms": args.max_p99_rise_pct,
+        "over_50ms": args.max_over_50ms_rise,
+        "over_100ms": args.max_over_100ms_rise,
+    }
+    limits = {key: DEFAULT_LIMITS[key] if value is None else value for key, value in overrides.items()}
+    output = [f"Baseline: {clean(args.baseline.name)}", f"Candidate: {clean(args.candidate.name)}"]
+    for key, value in overrides.items():
+        if value is not None:
+            shown = format(value.normalize(), "f") if isinstance(value, Decimal) else value
+            default = DEFAULT_LIMITS[key]
+            default = format(default.normalize(), "f") if isinstance(default, Decimal) else default
+            suffix = "%" if isinstance(value, Decimal) else ""
+            output.append(f"Limit override: {key} {LIMIT_TEXT[key].format(shown)} (default {default}{suffix})")
+    if differences:
+        output.append(f"Mismatch allowed: {'; '.join(differences)}")
+
+    rows, regressions = [], []
+    for key, label in COMPARE_ROWS:
+        base, cand = base_metrics[key], cand_metrics[key]
+        status = "info"
+        if key in limits:
+            status = "pass"
+            if is_regression(key, base, cand, limits[key]):
+                status = "REGRESSION"
+                regressions.append(key)
+        shown_base, shown_cand = (str(base), str(cand)) if key in COUNT_METRICS else (
+            format(one_decimal(base), "f"),
+            format(one_decimal(cand), "f"),
+        )
+        rows.append((label, shown_base, shown_cand, change_text(key, base, cand), limit_text(key, limits), status))
+
+    output += ["", *render_table(rows), ""]
+    output.append(f"RESULT: regression ({', '.join(regressions)})" if regressions else "RESULT: pass")
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(errors="backslashreplace")
+    sys.stdout.write("\n".join(output) + "\n")
+    return EXIT_REGRESSION if regressions else EXIT_PASS
 
 
 def write_atomic(path, text):
@@ -421,27 +652,62 @@ def positive_int(value):
     return number
 
 
+def percent_limit(maximum=None):
+    def parse(value):
+        if not re.fullmatch(r"\d+(?:\.\d+)?", value):
+            raise argparse.ArgumentTypeError("must be a non-negative percentage")
+        number = Decimal(value)
+        if maximum is not None and number > maximum:
+            raise argparse.ArgumentTypeError(f"must be at most {maximum}")
+        return number
+
+    return parse
+
+
+def count_limit(value):
+    if not re.fullmatch(r"\d+", value):
+        raise argparse.ArgumentTypeError("must be a non-negative whole number")
+    return int(value)
+
+
+def route_name(value):
+    name = clean(value)
+    if not name:
+        raise argparse.ArgumentTypeError("must not be blank")
+    return name
+
+
 def build_parser():
-    parser = argparse.ArgumentParser(description="Summarize FableDroid frame-timing logs.")
+    parser = argparse.ArgumentParser(description="Summarize and compare FableDroid frame-timing logs.")
     commands = parser.add_subparsers(dest="command", required=True)
     summarize = commands.add_parser("summarize", help="summarize one or more log files as JSON")
     summarize.add_argument("logs", nargs="+", type=Path, metavar="log")
     summarize.add_argument("--out", type=Path, help="also write the JSON to this file")
+    summarize.add_argument("--route", type=route_name, help="benchmark route name, required by compare")
     summarize.add_argument(
         "--window-seconds",
         type=positive_int,
         default=DEFAULT_WINDOW_SECONDS,
         help=f"per-window length for SWAPTIMING captures (default: {DEFAULT_WINDOW_SECONDS})",
     )
+    compare = commands.add_parser("compare", help="gate a candidate result against a baseline result")
+    compare.add_argument("baseline", type=Path)
+    compare.add_argument("candidate", type=Path)
+    compare.add_argument("--allow-mismatch", action="store_true", help="compare despite identity differences")
+    compare.add_argument(
+        "--max-fps-drop-pct", type=percent_limit(Decimal(100)), metavar="PCT", help="default: 1"
+    )
+    compare.add_argument("--max-p99-rise-pct", type=percent_limit(), metavar="PCT", help="default: 5")
+    compare.add_argument("--max-over-50ms-rise", type=count_limit, metavar="N", help="default: 0")
+    compare.add_argument("--max-over-100ms-rise", type=count_limit, metavar="N", help="default: 0")
     return parser
 
 
-def main(argv=None):
-    args = build_parser().parse_args(argv)
+def run_summarize(args):
     results = []
     for path in args.logs:
         try:
-            results.append(summarize_log(path, args.window_seconds))
+            results.append(summarize_log(path, args.window_seconds, args.route))
         except AnalyzeError as exc:
             print(f"error: {path.name}: {exc}", file=sys.stderr)
             return 1
@@ -460,6 +726,11 @@ def main(argv=None):
             return 1
     sys.stdout.write(text)
     return 0
+
+
+def main(argv=None):
+    args = build_parser().parse_args(argv)
+    return run_compare(args) if args.command == "compare" else run_summarize(args)
 
 
 if __name__ == "__main__":

@@ -161,6 +161,39 @@ Values were read from the code at SDK commit `cc5f03d` with the Android patch. `
 | `texture_diag_end` | `fable_2.toml` | `0` | `0` | `0` | `diagnostic` | no | Not measured. |
 | `texture_diag_start` | `fable_2.toml` | `0` | `0` | `0` | `diagnostic` | no | Not measured. |
 
+## Profiles
+
+`android/app/src/main/java/org/fable2/recomp/GpuProfile.java` owns the 31 keys the launcher manages. Every profile writes the same keys in the same order, so switching profiles leaves no stale values.
+
+| Used for | Profiles | Values today |
+|---|---|---|
+| Adreno 6xx | `adreno6xx-system`, `adreno6xx-turnip` | Same as the Adreno 740 tuning |
+| Adreno 7xx | `adreno7xx-system`, `adreno7xx-turnip` | The Adreno 740 tuning |
+| Adreno 8xx | `adreno8xx-system`, `adreno8xx-turnip` | Same as the Adreno 740 tuning |
+| Any other or undetected GPU | `generic` | Same as the Adreno 740 tuning |
+| Compatibility mode on any GPU | `compatibility` | Managed reference values |
+
+An empty driver id selects the `-system` profile, and any bundled or downloaded driver selects `-turnip`. `AUTO` is byte-identical to the launcher's earlier output for every GPU, driver and launcher setting. The hardware profiles stay identical until measured device tasks change them.
+
+The mode is stored in the `graphics_profile` preference and defaults to `AUTO`. T-019 adds the launcher control.
+
+### What Compatibility changes
+
+- **Uses the Reference value:** managed `shader-codegen`, `memory-upload`, `render-target` and `presentation` keys. Resolution scale, FXAA and fine foliage settings are ignored in this mode.
+- **Keeps its current value:** `cpu-wait`, `diagnostic` and `game-patch` keys, including the MSAA, intro-skip, frame-queue and FPS-logging settings.
+- **Keeps the selected driver.** `vulkan_android_custom_driver` is a `presentation` key, but forcing its empty Reference would make Compatibility impossible to test on Turnip.
+
+### What Compatibility does not change
+
+Compatibility does not recreate the unpatched renderer. It can only set the managed keys, because every profile must write the same key set and `AUTO` output must not change. These options stay away from their Reference value:
+
+- **Shader code:** `spirv_alpha_to_coverage_variant`, `spirv_branchless_endian_swap`, `spirv_implicit_lod_sampling`, `spirv_strict_zero_multiply` and `spirv_vfetch_single_binding_switch`
+- **Guest memory:** `readback_memexport`
+- **Render targets:** `execute_unclipped_draw_vs_on_cpu`, `rt_clear_quad_vs_hashes` and `rt_transfer_skip_mask`
+- **Audio output:** `audio_force_stereo`
+
+`spirv_exponent_bias_bits` has no proven Reference, and the patch's unconditional changes also remain.
+
 ## Keeping this file current
 
 When a change adds or changes one of these options, update its row in the same pull request. Mark a Reference as `unknown: <reason>` when the code does not prove it. Run the check with:

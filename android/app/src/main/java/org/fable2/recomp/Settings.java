@@ -19,31 +19,6 @@ final class Settings {
     // <internal storage>/gpu_drivers/<BUNDLED_DRIVER>, where the runtime loads it.
     static final String BUNDLED_DRIVER = "turnip27";
 
-    // Tuned defaults for Adreno 7xx (see docs/ANDROID_PERFORMANCE.md). The launcher
-    // writes these on every launch; settings below override some of them.
-    private static final String[][] TUNED = {
-        {"frame_wait_sleep_us", "100"},
-        {"posix_precise_wait_sleep", "true"},
-        {"game_idle_sleep_us", "100"},
-        {"log_gpu_diagnostics", "false"},
-        {"vulkan_robust_buffer_access", "true"},
-        {"gpu_bulk_type0", "true"},
-        {"vulkan_shared_memory_upload_first", "true"},
-        {"vulkan_submit_on_primary_buffer_end", "true"},
-        {"vulkan_dynamic_rendering", "true"},
-        {"spirv_split_temp_registers", "true"},
-        {"vulkan_shared_memory_texel_reads", "true"},
-        {"spirv_structured_forward_jumps", "true"},
-        {"spirv_implicit_lod_sampling_1d", "false"},
-        {"spirv_allow_contraction_pixel", "false"},
-        {"spirv_allow_contraction_vertex", "false"},
-        {"spirv_relaxed_precision_pixel", "false"},
-        {"tessellation_factor_cap", "8.0"},
-        {"spirv_unconditional_unsigned_sample", "true"},
-        {"spirv_gamma_only_branch", "true"},
-        {"spirv_unsigned_texture_variant", "true"},
-        {"present_render_pass_clear", "false"},
-    };
     // Development-only keys removed from the config if a test build left them.
     private static final String[] REMOVED = { "capture_swap_timing_frames", "vulkan_android_driver_env" };
 
@@ -66,6 +41,7 @@ final class Settings {
     }
     void setDriver(String id) { prefs.edit().putString("gpu_driver", id).apply(); }
     boolean logFps() { return prefs.getBoolean("log_fps", false); }
+    GpuProfile.Mode mode() { return GpuProfile.Mode.parse(prefs.getString("graphics_profile", "AUTO")); }
     int touchMode() { return prefs.getInt("touch_mode", TOUCH_AUTO); }
     float touchOpacity() { return prefs.getFloat("touch_opacity", 0.6f); }
     float touchScale() { return prefs.getFloat("touch_scale", 1f); }
@@ -102,19 +78,11 @@ final class Settings {
 
     /** Writes the managed keys into fable_2.toml, keeping every other line. */
     void writeGameConfig(File storage) throws IOException {
-        LinkedHashMap<String, String> managed = new LinkedHashMap<>();
-        for (String[] kv : TUNED) managed.put(kv[0], kv[1]);
-        int scale = resolutionScale();
-        managed.put("draw_resolution_scale_x", Integer.toString(scale));
-        managed.put("draw_resolution_scale_y", Integer.toString(scale));
-        managed.put("fable2_disable_msaa", msaa() ? "false" : "true");
-        managed.put("vulkan_max_frames_in_flight", tripleBuffering() ? "3" : "2");
-        managed.put("fable2_skip_intros", skipIntros() ? "true" : "false");
-        managed.put("guest_max_frames_ahead", lowLatency() ? "1" : "0");
-        managed.put("swap_post_effect", fxaa() ? "\"fxaa\"" : "\"none\"");
-        managed.put("spirv_alpha_to_coverage_1x_bayer", fineFoliage() ? "true" : "false");
-        managed.put("vulkan_android_custom_driver", "\"" + driver() + "\"");
-        managed.put("log_guest_fps_seconds", logFps() ? "5" : "0");
+        String selectedDriver = driver();
+        String profile = GpuProfile.resolve(GpuDetector.renderer(), selectedDriver, mode());
+        LinkedHashMap<String, String> managed = GpuProfile.managed(profile, new GpuProfile.Choices(
+            resolutionScale(), msaa(), tripleBuffering(), skipIntros(), lowLatency(), fxaa(), fineFoliage(),
+            selectedDriver, logFps()));
 
         File config = new File(storage, "fable_2.toml");
         List<String> lines = new ArrayList<>();
@@ -123,6 +91,16 @@ final class Settings {
                 for (String line; (line = r.readLine()) != null; ) lines.add(line);
             }
         }
+        List<String> out = mergeManagedKeys(lines, managed);
+        File partial = new File(storage, "fable_2.toml.writing");
+        try (Writer w = new OutputStreamWriter(new FileOutputStream(partial), StandardCharsets.UTF_8)) {
+            for (String line : out) w.write(line + "\n");
+        }
+        if (!partial.renameTo(config)) { partial.delete(); throw new IOException("Cannot write fable_2.toml"); }
+    }
+
+    /** Applies managed keys to existing config lines, keeping every other line. */
+    static List<String> mergeManagedKeys(List<String> lines, Map<String, String> managed) {
         Set<String> removed = new HashSet<>(Arrays.asList(REMOVED));
         Set<String> written = new HashSet<>();
         List<String> out = new ArrayList<>();
@@ -146,11 +124,7 @@ final class Settings {
         for (Map.Entry<String, String> e : managed.entrySet())
             if (!written.contains(e.getKey())) added.add(e.getKey() + " = " + e.getValue());
         out.addAll(insert, added);
-        File partial = new File(storage, "fable_2.toml.writing");
-        try (Writer w = new OutputStreamWriter(new FileOutputStream(partial), StandardCharsets.UTF_8)) {
-            for (String line : out) w.write(line + "\n");
-        }
-        if (!partial.renameTo(config)) { partial.delete(); throw new IOException("Cannot write fable_2.toml"); }
+        return out;
     }
 
     /** Copies the bundled GPU driver to internal storage when missing or outdated. */

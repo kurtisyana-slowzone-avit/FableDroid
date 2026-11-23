@@ -6,6 +6,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 DOC = ROOT / "docs/RENDERER_OPTIONS.md"
 SETTINGS = ROOT / "android/app/src/main/java/org/fable2/recomp/Settings.java"
+GPU_PROFILE = ROOT / "android/app/src/main/java/org/fable2/recomp/GpuProfile.java"
 PATCH = ROOT / "thirdparty/rexglue-sdk-android.patch"
 CONFIG_HEADER = ROOT / "src/core/fable2_config.h"
 APP_HEADER = ROOT / "src/core/fable_2_app.h"
@@ -29,11 +30,12 @@ def read(path):
 
 
 def settings_keys(text):
-    """Return {key: tuned value or None} for every key Settings.java writes or removes."""
-    block = re.search(r"TUNED = \{(.*?)\n\s*\};", text, re.S)
+    """Return {key: tuned value or None} for every key the launcher writes or removes."""
+    block = re.search(r"TUNED_BASE = \{(.*?)\n\s*\};", text, re.S)
     tuned = dict(re.findall(r'\{"(\w+)",\s*"([^"]*)"\}', block.group(1))) if block else {}
     keys = dict(tuned)
-    for key in re.findall(r'managed\.put\("(\w+)"', text):
+    user = re.search(r"USER_DEFAULTS = \{(.*?)\n\s*\};", text, re.S)
+    for key in re.findall(r'\{"(\w+)",', user.group(1)) if user else []:
         keys.setdefault(key, None)
     removed = re.search(r"REMOVED = \{(.*?)\}", text, re.S)
     for key in re.findall(r'"(\w+)"', removed.group(1)) if removed else []:
@@ -110,11 +112,13 @@ class ParserTests(unittest.TestCase):
 
     def test_settings_keys_cover_tuned_computed_and_removed(self):
         text = """
-        private static final String[][] TUNED = {
+        private static final String[][] TUNED_BASE = {
             {"tuned_key", "7"},
         };
+        private static final String[][] USER_DEFAULTS = {
+            {"computed_key", "\\"value\\""},
+        };
         private static final String[] REMOVED = { "removed_key" };
-        managed.put("computed_key", value);
         """
         self.assertEqual(settings_keys(text), {"tuned_key": "7", "computed_key": None, "removed_key": None})
 
@@ -180,7 +184,7 @@ class RendererOptionsDocTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.rows = doc_rows(read(DOC))
-        cls.settings = settings_keys(read(SETTINGS))
+        cls.settings = settings_keys(read(GPU_PROFILE) + read(SETTINGS))
         cls.patch = patch_cvars(read(PATCH))
 
     def assert_documented(self, keys):
@@ -208,6 +212,10 @@ class RendererOptionsDocTests(unittest.TestCase):
         wrong = [k for k in keys if self.rows[k]["file"].strip("`") != "fable2_config.toml"]
         wrong += [k for k in self.settings if self.rows[k]["file"].strip("`") != "fable_2.toml"]
         self.assertEqual(wrong, [])
+
+    def test_launcher_tables_are_found(self):
+        self.assertEqual(sum(value is not None for value in self.settings.values()), 21)
+        self.assertEqual(len(self.settings), 33)
 
     def test_tuned_values_match_settings(self):
         wrong = {

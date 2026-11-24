@@ -42,6 +42,9 @@ final class Settings {
     void setDriver(String id) { prefs.edit().putString("gpu_driver", id).apply(); }
     boolean logFps() { return prefs.getBoolean("log_fps", false); }
     GpuProfile.Mode mode() { return GpuProfile.Mode.parse(prefs.getString("graphics_profile", "AUTO")); }
+    void setMode(GpuProfile.Mode mode) { prefs.edit().putString("graphics_profile", mode.name()).apply(); }
+    /** The profile id the next launch writes, for the detected GPU and selected driver. */
+    String profileId() { return GpuProfile.resolve(GpuDetector.renderer(), driver(), mode()); }
     int touchMode() { return prefs.getInt("touch_mode", TOUCH_AUTO); }
     float touchOpacity() { return prefs.getFloat("touch_opacity", 0.6f); }
     float touchScale() { return prefs.getFloat("touch_scale", 1f); }
@@ -76,27 +79,93 @@ final class Settings {
     String touchLayout() { return prefs.getString("touch_layout", ""); }
     void setTouchLayout(String layout) { prefs.edit().putString("touch_layout", layout).apply(); }
 
-    /** Writes the managed keys into fable_2.toml, keeping every other line. */
+    // Lines that fable_2.overrides.toml replaced, so they can be put back. Kept here rather
+    // than in the config files because the in-game menu can rewrite fable_2.toml.
+    private static final String ENGINE_RESTORE = "overrides_restore_engine", GAME_RESTORE = "overrides_restore_game";
+
+    /**
+     * Writes the managed keys into fable_2.toml, keeping every other line, then applies
+     * fable_2.overrides.toml to fable_2.toml and fable2_config.toml.
+     */
     void writeGameConfig(File storage) throws IOException {
         String selectedDriver = driver();
         String profile = GpuProfile.resolve(GpuDetector.renderer(), selectedDriver, mode());
         LinkedHashMap<String, String> managed = GpuProfile.managed(profile, new GpuProfile.Choices(
             resolutionScale(), msaa(), tripleBuffering(), skipIntros(), lowLatency(), fxaa(), fineFoliage(),
             selectedDriver, logFps()));
+        ConfigOverrides overrides = ConfigOverrides.read(new File(storage, ConfigOverrides.FILE_NAME));
+        if (overrides == null) overrides = ConfigOverrides.empty();
 
         File config = new File(storage, "fable_2.toml");
+        ConfigOverrides.Applied engine = composeEngineConfig(readLines(config), managed, overrides,
+            ConfigOverrides.decodeRecord(prefs.getString(ENGINE_RESTORE, "")));
+        writeLines(config, engine.lines);
+        saveRecord(ENGINE_RESTORE, engine.restore);
+
+        // The game recreates fable2_config.toml with defaults when it is missing, so only an existing file is edited.
+        File gameConfig = new File(storage, "fable2_config.toml");
+        if (!gameConfig.isFile()) { saveRecord(GAME_RESTORE, Collections.emptyMap()); return; }
+        List<String> gameLines = readLines(gameConfig);
+        ConfigOverrides.Applied game = ConfigOverrides.applyGameConfig(gameLines, overrides.gameConfigOverrides,
+            ConfigOverrides.decodeRecord(prefs.getString(GAME_RESTORE, "")));
+        if (!game.lines.equals(gameLines)) writeLines(gameConfig, game.lines);
+        saveRecord(GAME_RESTORE, game.restore);
+    }
+
+    /** Status text for the overrides file, or null when there is none. */
+    String overridesSummary(File storage) {
+        ConfigOverrides overrides;
+        try { overrides = ConfigOverrides.read(new File(storage, ConfigOverrides.FILE_NAME)); }
+        catch (IOException e) { return "Cannot read " + ConfigOverrides.FILE_NAME + ": " + e.getMessage(); }
+        if (overrides == null) return null;
+        List<String> notApplied = new ArrayList<>();
+        File gameConfig = new File(storage, "fable2_config.toml");
+        if (!overrides.gameConfigOverrides.isEmpty()) {
+            try {
+                notApplied = gameConfig.isFile() ? ConfigOverrides.applyGameConfig(readLines(gameConfig),
+                    overrides.gameConfigOverrides, ConfigOverrides.decodeRecord(prefs.getString(GAME_RESTORE, ""))).notApplied
+                    : Collections.singletonList("[fable2_config] keys (fable2_config.toml does not exist yet; start the game once)");
+            } catch (IOException e) { notApplied = Collections.singletonList("fable2_config.toml: " + e.getMessage()); }
+        }
+        return ConfigOverrides.summary(overrides, notApplied);
+    }
+
+    /** Deletes fable_2.overrides.toml. The replaced values come back on the next writeGameConfig. */
+    static boolean clearOverrides(File storage) {
+        File file = new File(storage, ConfigOverrides.FILE_NAME);
+        return !file.exists() || file.delete();
+    }
+
+    /**
+     * Builds fable_2.toml: puts back lines an earlier override replaced, merges the managed
+     * keys (which also strips REMOVED keys), then applies overrides so they win over both.
+     */
+    static ConfigOverrides.Applied composeEngineConfig(List<String> lines, Map<String, String> managed,
+            ConfigOverrides overrides, Map<String, String> record) {
+        List<String> merged = mergeManagedKeys(ConfigOverrides.restore(lines, record, true), managed);
+        return ConfigOverrides.applyEngine(merged, overrides.engineOverrides);
+    }
+
+    private void saveRecord(String key, Map<String, String> record) {
+        String encoded = ConfigOverrides.encodeRecord(record);
+        if (!encoded.equals(prefs.getString(key, ""))) prefs.edit().putString(key, encoded).commit();
+    }
+
+    private static List<String> readLines(File file) throws IOException {
         List<String> lines = new ArrayList<>();
-        if (config.isFile()) {
-            try (BufferedReader r = new BufferedReader(new InputStreamReader(new FileInputStream(config), StandardCharsets.UTF_8))) {
-                for (String line; (line = r.readLine()) != null; ) lines.add(line);
-            }
+        if (!file.isFile()) return lines;
+        try (BufferedReader r = new BufferedReader(new InputStreamReader(new FileInputStream(file), StandardCharsets.UTF_8))) {
+            for (String line; (line = r.readLine()) != null; ) lines.add(line);
         }
-        List<String> out = mergeManagedKeys(lines, managed);
-        File partial = new File(storage, "fable_2.toml.writing");
+        return lines;
+    }
+
+    private static void writeLines(File file, List<String> lines) throws IOException {
+        File partial = new File(file.getParentFile(), file.getName() + ".writing");
         try (Writer w = new OutputStreamWriter(new FileOutputStream(partial), StandardCharsets.UTF_8)) {
-            for (String line : out) w.write(line + "\n");
+            for (String line : lines) w.write(line + "\n");
         }
-        if (!partial.renameTo(config)) { partial.delete(); throw new IOException("Cannot write fable_2.toml"); }
+        if (!partial.renameTo(file)) { partial.delete(); throw new IOException("Cannot write " + file.getName()); }
     }
 
     /** Applies managed keys to existing config lines, keeping every other line. */

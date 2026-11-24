@@ -122,6 +122,7 @@ All settings are in the launcher and apply the next time you tap **Play**.
 
 | Setting | Default | What it does |
 |---|---|---|
+| Graphics profile | Auto | Auto uses the settings tuned for your GPU family and driver. Compatibility uses the reference renderer values from [`docs/RENDERER_OPTIONS.md`](../docs/RENDERER_OPTIONS.md) to help track down graphics glitches; it ignores resolution scale, FXAA and fine foliage and keeps your selected driver. The profile in use (for example `adreno8xx-system`) is shown underneath. |
 | Resolution scale | 1x | Internal render resolution. 1x is the Xbox 360's own 1120×720. 2x and 3x are experimental and need far more GPU power than current handhelds have. |
 | Anti-aliasing (MSAA) | Off | The game's own 2x MSAA. Costs about 5 FPS on an Adreno 740. |
 | Triple buffering | Off | Allows one more queued frame, which can increase latency. No repeatable throughput benefit established on Thor; physical input-to-display latency has not been measured. |
@@ -132,6 +133,40 @@ All settings are in the launcher and apply the next time you tap **Play**.
 
 The launcher manages these keys in `fable_2.toml`. Any other key you add by hand is
 preserved, so advanced options from the desktop README still work.
+
+### Tester overrides
+
+For testing, put a file named `fable_2.overrides.toml` in
+`Android/data/org.fable2.recomp/files/` (for example with
+`adb push fable_2.overrides.toml /sdcard/Android/data/org.fable2.recomp/files/`).
+When you tap **Play**, the launcher applies it last:
+
+```toml
+# Top-level keys pin SDK cvars in fable_2.toml, including launcher-managed keys and
+# the development keys the launcher normally removes.
+capture_swap_timing_frames = 600
+present_render_pass_clear = true
+
+[fable2_config]
+# Keys here replace the matching key in fable2_config.toml.
+disable_texture_morphing = false
+high_tick_rate = false
+```
+
+- Only `key = value` lines, comments and one `[fable2_config]` section are accepted.
+  Keys use lowercase letters, digits and `_`. Values are numbers, `true`, `false`, or
+  single-line double-quoted strings without backslashes. The file is limited to 64 KB
+  and 200 overrides.
+- A `[fable2_config]` key is applied only when it appears exactly once in an existing
+  `fable2_config.toml`, so start the game once first. If the key only appears as a
+  commented-out default, such as `# high_tick_rate = true`, that line is replaced. Keys
+  that are missing, or that appear in more than one section, are listed as not applied.
+- While the file exists, the Graphics card shows how many overrides are active and
+  every rejected line with its line number. **Clear overrides** deletes the file; the
+  original values come back the next time you tap **Play**, even if the in-game menu
+  has saved `fable_2.toml` in between.
+- The debug benchmark launch below does not rewrite the config files, so it does not
+  apply overrides either.
 
 ---
 

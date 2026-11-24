@@ -1,5 +1,11 @@
 # Android changelog
 
+## Unreleased
+
+### Added
+- "Graphics profile" setting: Auto (tuned for your GPU and driver) or Compatibility (reference renderer values, to help track down graphics glitches). The profile in use is shown underneath.
+- Tester overrides: a `fable_2.overrides.toml` file in the app's files folder can pin any engine setting in `fable_2.toml` and, under `[fable2_config]`, change matching keys in `fable2_config.toml`. The launcher shows how many are active and any rejected lines, and **Clear overrides** puts the original values back on the next Play. Without the file, nothing changes.
+
 ## 0.6.3 beta — 2026-11-02
 
 ### Fixed

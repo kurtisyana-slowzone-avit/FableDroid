@@ -25,7 +25,8 @@ public final class LauncherActivity extends Activity {
     private TextView status, version;
     private Button playButton, isoButton, zipButton, cancelButton;
     private ProgressBar progress;
-    private LinearLayout settingsColumn, welcome;
+    private LinearLayout settingsColumn, welcome, overridesBox;
+    private TextView profileLabel, overridesText;
     private volatile boolean cancelImport, importing;
     private boolean hashing;
 
@@ -150,6 +151,14 @@ public final class LauncherActivity extends Activity {
 
         LinearLayout graphics = Ui.card(this);
         graphics.addView(Ui.title(this, "Graphics"));
+        GpuProfile.Mode[] modes = GpuProfile.Mode.values();
+        graphics.addView(Ui.row(this, "Graphics profile",
+            "Auto: settings tuned for your GPU and driver.\n"
+                + "Compatibility: reference renderer settings for tracking down graphics glitches; ignores resolution scale, FXAA and fine foliage, and may be slower.",
+            Ui.segmented(this, new String[] { "Auto", "Compatibility" }, settings.mode().ordinal(),
+                i -> { settings.setMode(modes[i]); updateProfileLabel(); })));
+        profileLabel = Ui.text(this, "", 13, Ui.MUTED, false);
+        graphics.addView(profileLabel);
         int scale = settings.resolutionScale();
         graphics.addView(Ui.row(this, "Resolution scale",
             "1x is the Xbox 360's native 1120×720. 2x and 3x render more pixels and need a much faster GPU.",
@@ -169,6 +178,26 @@ public final class LauncherActivity extends Activity {
         graphics.addView(Ui.row(this, "Low latency mode",
             "Stops the game queuing frames ahead of the GPU: about 15 ms less input lag. With the current renderer it costs no measurable frame rate. Recommended.",
             Ui.toggle(this, settings.lowLatency(), on -> settings.put("low_latency", on))));
+        // Only shown while a tester's fable_2.overrides.toml exists.
+        overridesBox = new LinearLayout(this);
+        overridesBox.setOrientation(LinearLayout.VERTICAL);
+        overridesBox.addView(Ui.text(this, "Tester overrides (" + ConfigOverrides.FILE_NAME + ")", 16, Ui.WARN, true));
+        overridesText = Ui.text(this, "", 13, Ui.MUTED, false);
+        overridesText.setPadding(0, Ui.dp(this, 2), 0, 0);
+        overridesBox.addView(overridesText);
+        LinearLayout overrideButtons = new LinearLayout(this);
+        Button clearOverrides = Ui.secondary(this, "Clear overrides");
+        clearOverrides.setOnClickListener(v -> {
+            toast(Settings.clearOverrides(root())
+                ? "Overrides cleared. The original values come back the next time you tap Play."
+                : "Could not delete " + ConfigOverrides.FILE_NAME);
+            updateOverrides();
+            playButton.requestFocus();
+        });
+        overrideButtons.addView(clearOverrides);
+        overridesBox.addView(overrideButtons, Ui.fill(this, 8));
+        overridesBox.setVisibility(View.GONE);
+        graphics.addView(overridesBox, Ui.fill(this, 8));
         column.addView(graphics);
 
         LinearLayout controls = Ui.card(this);
@@ -229,7 +258,19 @@ public final class LauncherActivity extends Activity {
             && new File(r, ".import-complete").isFile();
     }
 
+    private void updateProfileLabel() { profileLabel.setText("Profile in use: " + settings.profileId()); }
+
+    private void updateOverrides() {
+        File r = root();
+        String summary = r == null ? null : settings.overridesSummary(r);
+        overridesBox.setVisibility(summary == null ? View.GONE : View.VISIBLE);
+        if (summary != null) overridesText.setText(summary);
+    }
+
     private void refresh() {
+        // The driver can change in DriverActivity and testers push overrides with adb, so both update on resume.
+        updateProfileLabel();
+        updateOverrides();
         boolean ready = gameReady();
         playButton.setEnabled(ready);
         welcome.setVisibility(ready ? View.GONE : View.VISIBLE);

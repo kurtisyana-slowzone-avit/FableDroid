@@ -2,7 +2,10 @@ package org.fable2.recomp;
 
 import static org.junit.Assert.*;
 
+import java.io.File;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.util.*;
 import org.junit.Test;
 
@@ -307,6 +310,81 @@ public class ConfigOverridesTest {
             first.restore);
         assertEquals(first.lines, again.lines);
         assertEquals(first.restore, again.restore);
+    }
+
+    private static File repoFile(String path) {
+        for (File dir = new File(System.getProperty("user.dir")).getAbsoluteFile(); dir != null; dir = dir.getParentFile()) {
+            File candidate = new File(dir, path);
+            if (candidate.isFile()) return candidate;
+        }
+        throw new AssertionError(path + " not found above " + System.getProperty("user.dir"));
+    }
+
+    /** The template the game writes on first launch, from src/core/fable2_config.cpp. */
+    private static List<String> embeddedTemplate() throws IOException {
+        String source = new String(Files.readAllBytes(repoFile("src/core/fable2_config.cpp").toPath()), StandardCharsets.UTF_8);
+        int start = source.indexOf("R\"TOML_EOF(") + "R\"TOML_EOF(".length();
+        int end = source.indexOf(")TOML_EOF\"", start);
+        assertTrue("template markers not found", start > "R\"TOML_EOF(".length() && end > start);
+        return Arrays.asList(source.substring(start, end).replace("\r", "").split("\n", -1));
+    }
+
+    private static List<String> stagedConfig() throws IOException {
+        return Files.readAllLines(repoFile("config/fable2_config.toml").toPath(), StandardCharsets.UTF_8);
+    }
+
+    @Test public void documentedExampleAppliesToTheDefaultTemplates() throws IOException {
+        ConfigOverrides o = parse("[fable2_config]", "disable_texture_morphing = false", "high_tick_rate = false",
+            "higher_hf_tick_rate = false", "hotfunc_yield_every = 0");
+        for (List<String> template : Arrays.asList(embeddedTemplate(), stagedConfig())) {
+            ConfigOverrides.Applied a = ConfigOverrides.applyGameConfig(template, o.gameConfigOverrides,
+                Collections.emptyMap());
+            assertEquals(Collections.emptyList(), a.notApplied);
+            for (String key : o.gameConfigOverrides.keySet()) {
+                String line = key + " = " + o.gameConfigOverrides.get(key);
+                assertEquals(key, 1, Collections.frequency(a.lines, line));
+                int at = a.lines.indexOf(line);
+                String original = template.get(at);
+                assertEquals(key, original, a.restore.get(key));
+                assertTrue(original, original.contains(key));
+            }
+            assertEquals(template.size(), a.lines.size());
+            // The commented default sits in [patches], so the override lands there too.
+            int patches = a.lines.indexOf("[patches]"), perf = a.lines.indexOf("[perf]");
+            int tick = a.lines.indexOf("high_tick_rate = false");
+            assertTrue(patches < tick && tick < perf);
+
+            ConfigOverrides.Applied cleared = ConfigOverrides.applyGameConfig(a.lines, Collections.emptyMap(), a.restore);
+            assertEquals(template, cleared.lines);
+        }
+    }
+
+    @Test public void anActiveLineWinsOverACommentedDefault() {
+        List<String> file = Arrays.asList("[patches]", "# high_tick_rate = true", "[other]", "high_tick_rate = true");
+        ConfigOverrides.Applied a = ConfigOverrides.applyGameConfig(file, map("high_tick_rate", "false"),
+            Collections.emptyMap());
+        assertEquals(Arrays.asList("[patches]", "# high_tick_rate = true", "[other]", "high_tick_rate = false"), a.lines);
+    }
+
+    @Test public void proseAndNonScalarCommentsAreNotDefaults() {
+        List<String> file = Arrays.asList("[patches]",
+            "# ledges. Only acts while high_tick_rate is true.",
+            "# high_tick_rate is on. Requires high_tick_rate: ignored when that is false.",
+            "# high_tick_rate = see the notes above",
+            "#high_tick_rate=",
+            "## high_tick_rate = true");
+        ConfigOverrides.Applied a = ConfigOverrides.applyGameConfig(file, map("high_tick_rate", "false"),
+            Collections.emptyMap());
+        assertEquals(file, a.lines);
+        assertEquals(Collections.singletonList("high_tick_rate (not in fable2_config.toml)"), a.notApplied);
+    }
+
+    @Test public void commentedDefaultsInTwoSectionsAreAmbiguous() {
+        List<String> file = Arrays.asList("[a]", "# enabled = true", "[b]", "#enabled = false  # note");
+        ConfigOverrides.Applied a = ConfigOverrides.applyGameConfig(file, map("enabled", "false"),
+            Collections.emptyMap());
+        assertEquals(file, a.lines);
+        assertEquals(Collections.singletonList("enabled (in more than one section)"), a.notApplied);
     }
 
     @Test public void restoreRecordRoundTrips() {

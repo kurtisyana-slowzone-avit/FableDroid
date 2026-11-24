@@ -158,8 +158,9 @@ high_tick_rate = false
   single-line double-quoted strings without backslashes. The file is limited to 64 KB
   and 200 overrides.
 - A `[fable2_config]` key is applied only when it appears exactly once in an existing
-  `fable2_config.toml`, so start the game once first. Keys that are missing, or that
-  appear in more than one section, are listed as not applied.
+  `fable2_config.toml`, so start the game once first. If the key only appears as a
+  commented-out default, such as `# high_tick_rate = true`, that line is replaced. Keys
+  that are missing, or that appear in more than one section, are listed as not applied.
 - While the file exists, the Graphics card shows how many overrides are active and
   every rejected line with its line number. **Clear overrides** deletes the file; the
   original values come back the next time you tap **Play**, even if the in-game menu

@@ -158,10 +158,15 @@ final class ConfigOverrides {
         }
     }
 
+    // A commented-out default such as "# high_tick_rate = true": the game template ships
+    // platform-dependent keys this way so the built-in default applies.
+    private static final Pattern COMMENTED_DEFAULT = Pattern.compile("#\\s*([a-z0-9_]+)\\s*=(.*)");
+
     /** Index of each line's key and section, for one file. */
     private static final class Lines {
         final List<String> lines;
         final List<String> keys = new ArrayList<>();
+        final List<String> commentedKeys = new ArrayList<>();
         final List<String> sections = new ArrayList<>();
 
         Lines(List<String> lines) {
@@ -173,15 +178,26 @@ final class ConfigOverrides {
                 int eq = trimmed.indexOf('=');
                 keys.add(eq > 0 && !trimmed.startsWith("#") && !trimmed.startsWith("[")
                     ? trimmed.substring(0, eq).trim() : null);
+                java.util.regex.Matcher m = COMMENTED_DEFAULT.matcher(trimmed);
+                commentedKeys.add(m.matches() && scalar(m.group(2)) != null ? m.group(1) : null);
                 sections.add(section);
             }
         }
 
         /** Line indexes holding the key; topLevel limits the search to lines before any table. */
         List<Integer> find(String key, boolean topLevel) {
+            return find(keys, key, topLevel);
+        }
+
+        /** Line indexes holding the key as a commented-out default. */
+        List<Integer> findCommented(String key) {
+            return find(commentedKeys, key, false);
+        }
+
+        private List<Integer> find(List<String> lineKeys, String key, boolean topLevel) {
             List<Integer> found = new ArrayList<>();
             for (int i = 0; i < lines.size(); ++i)
-                if (key.equals(keys.get(i)) && (!topLevel || sections.get(i) == null)) found.add(i);
+                if (key.equals(lineKeys.get(i)) && (!topLevel || sections.get(i) == null)) found.add(i);
             return found;
         }
 
@@ -231,8 +247,9 @@ final class ConfigOverrides {
 
     /**
      * Restores the previous record, then applies [fable2_config] overrides by replacing the
-     * matching key line. Keys that are missing, or present in more than one section, are
-     * left alone and reported, because the right place for them is unknown.
+     * matching key line, or the commented-out default ("# key = value") when the key has no
+     * active line. Keys that are missing, or present in more than one section, are left
+     * alone and reported, because the right place for them is unknown.
      */
     static Applied applyGameConfig(List<String> lines, Map<String, String> overrides, Map<String, String> record) {
         List<String> out = restore(lines, record, false);
@@ -241,6 +258,7 @@ final class ConfigOverrides {
         Lines index = new Lines(out);
         for (Map.Entry<String, String> e : overrides.entrySet()) {
             List<Integer> found = index.find(e.getKey(), false);
+            if (found.isEmpty()) found = index.findCommented(e.getKey());
             if (found.isEmpty()) { notApplied.add(e.getKey() + " (not in fable2_config.toml)"); continue; }
             if (found.size() > 1) { notApplied.add(e.getKey() + " (in more than one section)"); continue; }
             restore.put(e.getKey(), out.get(found.get(0)));

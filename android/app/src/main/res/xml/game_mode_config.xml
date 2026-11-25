@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Android Game Mode configuration (read by GameManager on Android 13 and later).
+
+    Opts out of platform and OEM Game Mode interventions (Samsung Game Booster / Game
+    Optimizing Service, OnePlus Games / HyperBoost) so the renderer is measured and played
+    at the resolution and frame pacing it chooses itself:
+      - allowGameDownscaling="false": no resolution downscaling.
+      - allowGameFpsOverride="false": no frame-rate override or throttling.
+      - allowGameAngleDriver="false": never swap in ANGLE; the game renders with Vulkan.
+
+    Support for the performance and battery game modes is not declared, because the app
+    does not yet respond to GameManager.getGameMode().
+-->
+<game-mode-config xmlns:android="http://schemas.android.com/apk/res/android"
+    android:allowGameDownscaling="false"
+    android:allowGameFpsOverride="false"
+    android:allowGameAngleDriver="false" />

@@ -217,6 +217,18 @@ The GPU is at its limit, about 1 ms per frame short of a locked 30.
 2x and 3x boot and run but are far below playable speed on current handhelds.
 Details of the performance work are in [docs/ANDROID_PERFORMANCE.md](../docs/ANDROID_PERFORMANCE.md).
 
+### Game Mode and OEM game boosters
+
+The app opts out of Android Game Mode resolution downscaling and frame-rate
+overrides, and does not allow the ANGLE driver
+([`game_mode_config.xml`](app/src/main/res/xml/game_mode_config.xml)). Phone game
+boosters such as Samsung Game Booster / Game Optimizing Service (GOS) and OnePlus
+Games (HyperBoost) otherwise silently lower the render resolution or cap or
+interpolate the frame rate of apps marked as games. That would blur the picture,
+upset the game's 30 FPS frame pacing and make benchmark results measure the
+booster instead of the renderer. Performance and battery game modes are not
+offered yet, because the game does not react to them.
+
 ---
 
 ## Troubleshooting

@@ -214,8 +214,8 @@ class RendererOptionsDocTests(unittest.TestCase):
         self.assertEqual(wrong, [])
 
     def test_launcher_tables_are_found(self):
-        self.assertEqual(sum(value is not None for value in self.settings.values()), 21)
-        self.assertEqual(len(self.settings), 33)
+        self.assertEqual(sum(value is not None for value in self.settings.values()), 23)
+        self.assertEqual(len(self.settings), 35)
 
     def test_tuned_values_match_settings(self):
         wrong = {

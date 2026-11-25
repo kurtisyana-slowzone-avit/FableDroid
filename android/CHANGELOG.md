@@ -7,6 +7,7 @@
 - Tester overrides: a `fable_2.overrides.toml` file in the app's files folder can pin any engine setting in `fable_2.toml` and, under `[fable2_config]`, change matching keys in `fable2_config.toml`. The launcher shows how many are active and any rejected lines, and **Clear overrides** puts the original values back on the next Play. Without the file, nothing changes.
 
 ### Changed
+- The app now opts out of Android Game Mode resolution downscaling and frame-rate overrides (and the ANGLE driver), so phone game boosters such as Samsung Game Booster / GOS and OnePlus Games no longer silently lower the resolution or change the frame rate.
 - Every graphics profile, Compatibility included, now turns off the two Vulkan present modes that can tear (IMMEDIATE and FIFO_RELAXED), so the game only presents with MAILBOX or FIFO. Android phones normally offer only those two, so on most devices nothing changes.
 
 ## 0.6.3 beta — 2026-11-02

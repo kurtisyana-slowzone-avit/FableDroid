@@ -177,3 +177,61 @@ The analyzer stops with a one-line error instead of reporting a number it cannot
 A damaged capture is never replaced by `GUESTFPS` data. Malformed `SWAPQUEUE`, `GPUSTAT` or `GPUTIME` records do not affect frame metrics, so they are skipped and listed in `warnings`. The same applies to a malformed `GUESTFPS` record when a valid capture is present.
 
 Do not commit raw logs from play sessions. Results kept under `docs/perf/` should contain only metrics and hashes.
+
+## Golden scenes
+
+`tools/bench/golden.py` checks rendering against a reference set of captured frames. Each directory holds one PNG per scene, and the file name without `.png` is the scene name. Use the remote-control `screenshot` command to capture them. It saves the guest frame at the guest resolution, before scaling to the display, so captures from phones and foldables with different screen shapes can be compared pixel for pixel.
+
+```powershell
+py -3 tools/bench/golden.py compare golden/s24u-reference golden/candidate --diff-dir golden/diffs
+```
+
+| Option | Meaning |
+|---|---|
+| `<reference-dir> <candidate-dir>` | Directories of `<scene>.png` files. Only the top level is read, and files ending in `.diff.png` are skipped. |
+| `--min-ssim <f>` | Lowest passing structural similarity score. The default is 0.98. |
+| `--max-diff-fraction <f>` | Highest passing fraction of differing pixels. The default is 0.01. |
+| `--tolerance <n>` | A pixel differs when any of its red, green or blue values differs by more than `n` (0 to 255). The default is 8. |
+| `--diff-dir <dir>` | Write `<scene>.diff.png` for each failing scene: the reference in dim grey with every differing pixel in red. It must not be the reference or candidate directory. |
+| `--out <file>` | Where to write the JSON summary. The default is `golden_summary.json` in the candidate directory. |
+
+A scene passes when its SSIM is at least `--min-ssim` and its differing-pixel fraction is at most `--max-diff-fraction`. A value exactly at a threshold passes.
+
+| Exit code | Meaning |
+|---|---|
+| `0` | Every reference scene has a candidate and passes |
+| `1` | A scene failed, has no candidate, has a different size, or is not a supported PNG |
+| `2` | An argument is invalid, a directory is missing, the reference directory has no scenes, a file cannot be opened, or the summary cannot be written |
+
+A candidate scene with no reference is listed but not gated.
+
+### How the scores are calculated
+
+- **SSIM** uses BT.601 luma (`0.299 R + 0.587 G + 0.114 B`) over non-overlapping 8×8 windows, with the usual constants for 8-bit data (`C1 = (0.01 × 255)²`, `C2 = (0.03 × 255)²`). Windows at the right and bottom edges are clipped to the image. The score is the mean over all windows, so identical images score exactly 1.
+- **Differing-pixel fraction** is the share of pixels where any colour value differs by more than `--tolerance`.
+- Alpha is ignored, so an RGB capture can be compared with an RGBA one.
+- Images of different sizes are not scored; the scene fails with both sizes in its reason.
+
+### PNG support
+
+The tool reads and writes PNG with only `zlib` and `struct`. It reads 8-bit RGB and RGBA, non-interlaced, with any of the five row filters and any number of `IDAT` chunks. That covers the uncompressed (stored-block) files that `src/diagnostics/fable2_frame_capture.h` writes and ordinary compressed files. Palette, greyscale, 16-bit and interlaced files are rejected with an error, as is any file with a CRC mismatch or truncated data.
+
+### JSON summary
+
+| Field | Meaning |
+|---|---|
+| `thresholds` | `min_ssim`, `max_diff_fraction` and `tolerance` used for the run |
+| `scenes[].status` | `pass`, `fail`, `missing` (no candidate) or `error` (unreadable image) |
+| `scenes[].ssim`, `scenes[].diff_fraction` | Scores, or `null` when the images were not compared |
+| `scenes[].reference_size`, `scenes[].candidate_size` | `WIDTHxHEIGHT` |
+| `scenes[].reasons` | Why the scene did not pass |
+| `scenes[].reference_sha256`, `scenes[].candidate_sha256` | Hashes of the PNG files |
+| `scenes[].diff_image` | Name of the difference image, or `null` |
+| `extra_candidates` | Candidate scenes with no reference |
+| `result` | `pass` or `fail` |
+
+The summary records directory names only, never full paths.
+
+### Keeping game content out of the repository
+
+Captured frames and difference images show game content. Keep them on your own machine and never commit or upload them. Only the JSON summary, which holds scores and hashes, belongs under `docs/perf/`.

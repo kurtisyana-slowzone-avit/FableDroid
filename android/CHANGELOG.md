@@ -8,6 +8,7 @@
 
 ### Changed
 - The app now opts out of Android Game Mode resolution downscaling and frame-rate overrides (and the ANGLE driver), so phone game boosters such as Samsung Game Booster / GOS and OnePlus Games no longer silently lower the resolution or change the frame rate.
+- Every graphics profile, Compatibility included, now turns off the two Vulkan present modes that can tear (IMMEDIATE and FIFO_RELAXED), so the game only presents with MAILBOX or FIFO. Android phones normally offer only those two, so on most devices nothing changes.
 
 ## 0.6.3 beta — 2026-11-02
 

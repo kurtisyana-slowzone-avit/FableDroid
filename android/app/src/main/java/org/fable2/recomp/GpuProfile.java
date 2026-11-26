@@ -71,6 +71,10 @@ final class GpuProfile {
         {"spirv_gamma_only_branch", "true"},
         {"spirv_unsigned_texture_variant", "true"},
         {"present_render_pass_clear", "false"},
+        // Tear-free by construction (T-029): only MAILBOX and FIFO may be chosen. These are not
+        // tuning, so Compatibility keeps them too. The MAILBOX switch is left to T-030 and T-032.
+        {"vulkan_allow_present_mode_immediate", "false"},
+        {"vulkan_allow_present_mode_fifo_relaxed", "false"},
     };
 
     // Keys driven by launcher settings, with the values for a fresh install.
@@ -89,7 +93,8 @@ final class GpuProfile {
 
     // Reference values from docs/RENDERER_OPTIONS.md for managed shader-codegen, memory-upload,
     // render-target and presentation keys. The driver is deliberately absent: Compatibility
-    // must be testable on each driver, so the selected driver always stays in effect.
+    // must be testable on each driver, so the selected driver always stays in effect. The
+    // tear-free present-mode keys are absent too, because Compatibility must not tear either.
     private static final String[][] COMPATIBILITY_VALUES = {
         {"vulkan_robust_buffer_access", "true"},
         {"vulkan_shared_memory_upload_first", "false"},

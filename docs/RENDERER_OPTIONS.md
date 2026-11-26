@@ -1,6 +1,6 @@
 # Renderer and patch options
 
-This is the reference for the 82 options that shape FableDroid's renderer and game patches on Android. It covers every key the launcher writes, every cvar added by `thirdparty/rexglue-sdk-android.patch`, every cvar seeded in `src/core/fable_2_app.h`, and every `[patches]` and `[perf]` key in `fable2_config.toml`.
+This is the reference for the 84 options that shape FableDroid's renderer and game patches on Android. It covers every key the launcher writes, every cvar added by `thirdparty/rexglue-sdk-android.patch`, every cvar seeded in `src/core/fable_2_app.h`, and every `[patches]` and `[perf]` key in `fable2_config.toml`.
 
 Values were read from the code at SDK commit `cc5f03d` with the Android patch. `tests/test_renderer_options_doc.py` fails if a covered option is missing from this file.
 
@@ -113,6 +113,8 @@ Values were read from the code at SDK commit `cc5f03d` with the Android patch. `
 | `audio_force_stereo` | `fable_2.toml` | `true` on Android, `false` elsewhere | `true` | `false` | `presentation` | yes | Not measured. Keeps center-channel dialogue audible on built-in speakers (SDK patch comment). |
 | `present_render_pass_clear` | `fable_2.toml` | `true` | `false` | `true` | `presentation` | yes | `false` saves about 0.24 ms of GPU time per frame (`ANDROID_PERFORMANCE.md`). |
 | `swap_post_effect` | `fable_2.toml` | `"none"` | `"fxaa"`, or `"none"` with FXAA off | `"none"` | `presentation` | yes | Not measured. |
+| `vulkan_allow_present_mode_fifo_relaxed` | `fable_2.toml` | `true` | `false` | `true` | `presentation` | yes | Not measured. `true` lets the swapchain use FIFO_RELAXED, which tears when a frame is late. `false` keeps Android tear-free (T-029). Android surfaces normally offer only MAILBOX and FIFO, so conformant drivers pick the same mode either way. |
+| `vulkan_allow_present_mode_immediate` | `fable_2.toml` | `true` | `false` | `true` | `presentation` | yes | Not measured. `true` makes IMMEDIATE, which tears, the first choice. `false` keeps Android tear-free (T-029). Android surfaces normally offer only MAILBOX and FIFO, so conformant drivers pick the same mode either way. |
 | `vulkan_android_custom_driver` | `fable_2.toml` | `""` | `"turnip27"` on Adreno 7xx, `""` on other GPUs, or the chosen driver | `""` | `presentation` | yes | Mesa Turnip v27: 10.3 to 15.5 FPS. Gen8 V38: same average FPS as v27 (`ANDROID_PERFORMANCE.md`). |
 | `vulkan_android_driver_env` | `fable_2.toml` | `""` | deleted from the file on Play | `""` | `presentation` | yes | GMEM and tiling driver options: neutral or worse (`ANDROID_PERFORMANCE.md`). |
 
@@ -163,7 +165,7 @@ Values were read from the code at SDK commit `cc5f03d` with the Android patch. `
 
 ## Profiles
 
-`android/app/src/main/java/org/fable2/recomp/GpuProfile.java` owns the 31 keys the launcher manages. Every profile writes the same keys in the same order, so switching profiles leaves no stale values.
+`android/app/src/main/java/org/fable2/recomp/GpuProfile.java` owns the 33 keys the launcher manages. Every profile writes the same keys in the same order, so switching profiles leaves no stale values.
 
 | Used for | Profiles | Values today |
 |---|---|---|
@@ -173,7 +175,7 @@ Values were read from the code at SDK commit `cc5f03d` with the Android patch. `
 | Any other or undetected GPU | `generic` | Same as the Adreno 740 tuning |
 | Compatibility mode on any GPU | `compatibility` | Managed reference values |
 
-An empty driver id selects the `-system` profile, and any bundled or downloaded driver selects `-turnip`. `AUTO` is byte-identical to the launcher's earlier output for every GPU, driver and launcher setting. The hardware profiles stay identical until measured device tasks change them.
+An empty driver id selects the `-system` profile, and any bundled or downloaded driver selects `-turnip`. `AUTO` is byte-identical to the 0.6.3 launcher's output for every GPU, driver and launcher setting, except for the two tear-free present-mode keys added by T-029. The hardware profiles stay identical until measured device tasks change them.
 
 The mode is stored in the `graphics_profile` preference and defaults to `AUTO`. T-019 adds the launcher control.
 
@@ -181,6 +183,7 @@ The mode is stored in the `graphics_profile` preference and defaults to `AUTO`. 
 
 - **Uses the Reference value:** managed `shader-codegen`, `memory-upload`, `render-target` and `presentation` keys. Resolution scale, FXAA and fine foliage settings are ignored in this mode.
 - **Keeps its current value:** `cpu-wait`, `diagnostic` and `game-patch` keys, including the MSAA, intro-skip, frame-queue and FPS-logging settings.
+- **Stays tear-free.** `vulkan_allow_present_mode_immediate` and `vulkan_allow_present_mode_fifo_relaxed` are `presentation` keys, but Compatibility keeps them `false`, because only MAILBOX and FIFO are allowed on Android (T-029).
 - **Keeps the selected driver.** `vulkan_android_custom_driver` is a `presentation` key, but forcing its empty Reference would make Compatibility impossible to test on Turnip.
 
 ### What Compatibility does not change

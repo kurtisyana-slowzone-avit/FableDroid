@@ -43,7 +43,14 @@ public class GpuProfileTest {
         {"spirv_gamma_only_branch", "true"},
         {"spirv_unsigned_texture_variant", "true"},
         {"present_render_pass_clear", "false"},
+        // T-029 deliberately added these two keys after 0.6.3 (Principle 4: tear-free by
+        // construction). Every other value and the key order stay as released.
+        {"vulkan_allow_present_mode_immediate", "false"},
+        {"vulkan_allow_present_mode_fifo_relaxed", "false"},
     };
+    // Present modes that can tear. Every profile, Compatibility included, must disable them.
+    private static final String[] TEARING_MODES = {
+        "vulkan_allow_present_mode_immediate", "vulkan_allow_present_mode_fifo_relaxed" };
     private static final String[] FROZEN_REMOVED = { "capture_swap_timing_frames", "vulkan_android_driver_env" };
 
     private static LinkedHashMap<String, String> frozenManaged(int scale, boolean msaa, boolean triple, boolean skip,
@@ -192,7 +199,7 @@ public class GpuProfileTest {
 
     @Test public void everyProfileWritesTheSameKeysInTheSameOrder() {
         List<String> expected = new ArrayList<>(GpuProfile.keys("generic").keySet());
-        assertEquals(31, expected.size());
+        assertEquals(33, expected.size());
         for (String id : HARDWARE) assertEquals(id, expected, new ArrayList<>(GpuProfile.keys(id).keySet()));
         assertEquals(expected, new ArrayList<>(GpuProfile.keys("compatibility").keySet()));
     }
@@ -201,16 +208,34 @@ public class GpuProfileTest {
         Map<String, String[]> rows = documentedRows();
         Map<String, String> compatibility = GpuProfile.keys("compatibility");
         Map<String, String> hardware = GpuProfile.keys("generic");
+        Set<String> keptInCompatibility = new HashSet<>(Arrays.asList(TEARING_MODES));
+        keptInCompatibility.add("vulkan_android_custom_driver");
         for (Map.Entry<String, String> entry : compatibility.entrySet()) {
             String key = entry.getKey();
             String[] row = rows.get(key);
             assertNotNull(key + " is not documented", row);
             assertEquals(key, 8, row.length);
             String risk = firstCode(row[5]);
-            if (REFERENCE_CLASSES.contains(risk) && !key.equals("vulkan_android_custom_driver"))
+            if (REFERENCE_CLASSES.contains(risk) && !keptInCompatibility.contains(key))
                 assertEquals(key, firstCode(row[4]), entry.getValue());
             else
                 assertEquals(key, hardware.get(key), entry.getValue());
+        }
+    }
+
+    @Test public void everyProfileDisablesTearingPresentModes() {
+        List<String> ids = new ArrayList<>(Arrays.asList(HARDWARE));
+        ids.add("compatibility");
+        for (String id : ids) {
+            for (String key : TEARING_MODES) assertEquals(id + " " + key, "false", GpuProfile.keys(id).get(key));
+            for (String driver : DRIVERS) for (int flags = 0; flags < 128; ++flags) {
+                LinkedHashMap<String, String> out = GpuProfile.managed(id, new GpuProfile.Choices(1 + flags % 3,
+                    (flags & 1) != 0, (flags & 2) != 0, (flags & 4) != 0, (flags & 8) != 0, (flags & 16) != 0,
+                    (flags & 32) != 0, driver, (flags & 64) != 0));
+                for (String key : TEARING_MODES) assertEquals(id + " " + key, "false", out.get(key));
+            }
+            // MAILBOX vs FIFO is left to T-030 and T-032, so the launcher must not manage it.
+            assertFalse(id, GpuProfile.keys(id).containsKey("vulkan_allow_present_mode_mailbox"));
         }
     }
 
